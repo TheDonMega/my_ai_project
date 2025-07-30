@@ -1,0 +1,155 @@
+.container { max-width: 800px; margin: 0 auto; padding: 20px; }
+.status { margin-bottom: 20px; padding: 10px; background-color: #e8f5e9; border-radius: 4px; color: #2e7d32; }
+.questionForm { margin-bottom: 20px; }
+.questionForm textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: vertical; min-height: 100px; }
+.button { padding: 10px 20px; background-color: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 1rem; }
+.button:disabled { background-color: #ccc; cursor: not-allowed; }
+.button:hover:not(:disabled) { background-color: #0051c3; }
+.processing { margin: 20px 0; padding: 15px; background-color: #e3f2fd; border-radius: 4px; color: #0d47a1; display: flex; align-items: center; gap: 10px; }
+.loadingDots::after { content: "..."; display: inline-block; animation: dots 1.5s steps(5, end) infinite; }
+@keyframes dots { 
+  0%, 20% { content: "."; }
+  40% { content: ".."; }
+  60% { content: "..."; }
+  80% { content: "...."; }
+  100% { content: "....."; }
+}
+
+.answer {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f7f7f7;
+  border-radius: 4px;
+}
+
+.sources {
+  margin-top: 20px;
+  border-top: 1px solid #eaeaea;
+  padding-top: 15px;
+}
+
+.sourcesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.toggleButton {
+  padding: 5px 10px;
+  font-size: 0.9em;
+  background-color: #f0f0f0;
+}
+
+.sourcesList {
+  opacity: 1;
+  max-height: 2000px;
+  transition: all 0.3s ease-in-out;
+}
+
+.sourcesList.collapsed {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+}
+
+.sourceItem {
+  margin-bottom: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.sourceHeader {
+  padding: 12px 15px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eaeaea;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sourceContent {
+  padding: 15px;
+}
+
+.sourceContent pre {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: monospace;
+  margin-bottom: 10px;
+}
+
+.viewFullButton {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  text-align: center;
+  background-color: #e9ecef;
+  border: none;
+  border-radius: 4px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.viewFullButton:hover {
+  background-color: #dee2e6;
+}
+
+.relevance {
+  margin-left: auto;
+  color: #666;
+  font-size: 0.9em;
+}
+
+.notice {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeeba;
+  border-radius: 4px;
+  color: #856404;
+}
+
+.followUp {
+  margin-top: 30px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.followUpButtons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.followUpButtons button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 4px;
+  background-color: #e9ecef;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.followUpButtons button:hover {
+  background-color: #dee2e6;
+}
+
+@keyframes dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60% { content: '...'; }
+  80% { content: '....'; }
+  100% { content: '.....'; }
+}
+
+.loadingDots:after {
+  content: '...';
+  animation: dots 1.5s steps(5, end) infinite;
+}
