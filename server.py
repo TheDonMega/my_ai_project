@@ -3,23 +3,55 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+# Import CrewAI analyzer
+try:
+    from crewai_analyzer import get_crewai_analyzer
+    CREWAI_AVAILABLE = True
+    print("✅ CrewAI integration available")
+except ImportError as e:
+    CREWAI_AVAILABLE = False
+    print(f"⚠️  CrewAI not available: {e}")
+
 # --- Setup ---
 # Load environment variables from .env file
 load_dotenv()
-# Configure the Gemini API key
+# Configure the Gemini API key (only used for web search, not for CrewAI)
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # --- 1. Load the Knowledge Base ---
 def load_knowledge_base(folder_path="./knowledge_base"):
-    """Loads all .md files from a folder into a list of dictionaries."""
+    """Loads all .md files from a folder and its subfolders recursively into a list of dictionaries."""
     knowledge = []
-    print(f"Loading documents from {folder_path}...")
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".md"):
-            with open(os.path.join(folder_path, filename), 'r', encoding='utf-8') as f:
-                content = f.read()
-                knowledge.append({"filename": filename, "content": content})
-    print(f"Loaded {len(knowledge)} documents.")
+    print(f"Loading documents from {folder_path} and subfolders...")
+    
+    def load_recursive(current_path, base_path):
+        """Recursively load markdown files from current path and subdirectories."""
+        try:
+            for item in os.listdir(current_path):
+                item_path = os.path.join(current_path, item)
+                
+                if os.path.isdir(item_path):
+                    # Recursively search subdirectories
+                    load_recursive(item_path, base_path)
+                elif item.endswith(".md"):
+                    # Calculate relative path from base knowledge_base directory
+                    relative_path = os.path.relpath(item_path, base_path)
+                    
+                    with open(item_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        knowledge.append({
+                            "filename": relative_path,  # Include folder path
+                            "content": content,
+                            "full_path": item_path
+                        })
+        except PermissionError:
+            print(f"Permission denied accessing: {current_path}")
+        except Exception as e:
+            print(f"Error accessing {current_path}: {e}")
+    
+    # Start recursive search from the base folder
+    load_recursive(folder_path, folder_path)
+    print(f"Loaded {len(knowledge)} documents from {folder_path} and subfolders.")
     return knowledge
 
 # --- 2. Search for Relevant Context ---
@@ -79,11 +111,16 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
             
             # Only include sections with matches
             if score > 0:
+                # Extract folder path from filename (everything before the last '/')
+                filename_parts = doc['filename'].split('/')
+                folder_path = '/'.join(filename_parts[:-1]) if len(filename_parts) > 1 else 'root'
+                
                 results.append({
                     "score": score,
                     "section": content.strip(),
                     "header": section['header'],
                     "filename": doc['filename'],
+                    "folder_path": folder_path,
                     "relevance": round((score / (len(query_words) + 2)) * 100, 2)  # Adjusted for header bonus
                 })
     
@@ -249,6 +286,29 @@ def ask():
 
     # Initial search in knowledge base
     if data.get('step') == 'initial' or 'step' not in data:
+        # Try CrewAI first if available
+        if CREWAI_AVAILABLE:
+            try:
+                print("🤖 Using CrewAI for local knowledge base analysis...")
+                crewai_analyzer = get_crewai_analyzer()
+                crewai_result = crewai_analyzer.analyze_query(user_question)
+                
+                if crewai_result and crewai_result.get('answer'):
+                    steps.append("CrewAI multi-agent analysis completed")
+                    return jsonify({
+                        'answer': crewai_result['answer'],
+                        'sources': crewai_result.get('sources', []),
+                        'next_step': 'ask_ai',
+                        'prompt': 'Would you like me to analyze this further using AI? (Y/N)',
+                        'steps': steps,
+                        'method': crewai_result.get('method', 'crewai')
+                    })
+                else:
+                    print("⚠️  CrewAI returned no results, falling back to simple search")
+            except Exception as e:
+                print(f"⚠️  CrewAI analysis failed: {e}, falling back to simple search")
+        
+        # Fallback to original search method
         relevant_docs = search_knowledge_base(user_question, kb)
         
         if not relevant_docs:
@@ -263,12 +323,21 @@ def ask():
 
         # Found relevant docs in knowledge base
         steps.append(f"Found {len(relevant_docs)} relevant document sections")
-        answer = ("Based on the local knowledge base:\n\n" + 
-                 "\n\n".join([f"From {doc['filename']}:\n{doc['section']}" 
-                             for doc in relevant_docs[:2]]))
+        
+        # Format the answer to show folder structure clearly
+        answer_parts = []
+        for doc in relevant_docs[:2]:
+            if doc['folder_path'] == 'root':
+                location = f"From {doc['filename']}"
+            else:
+                location = f"From {doc['folder_path']}/{doc['filename'].split('/')[-1]}"
+            answer_parts.append(f"{location}:\n{doc['section']}")
+        
+        answer = "Based on the local knowledge base:\n\n" + "\n\n".join(answer_parts)
         
         sources = [{
             'filename': doc['filename'],
+            'folder_path': doc['folder_path'],
             'relevance': doc['relevance'],
             'header': doc['header'] if doc['header'] else 'No header',
             'content': doc['section'],
@@ -280,7 +349,8 @@ def ask():
             'sources': sources,
             'next_step': 'ask_ai',
             'prompt': 'Would you like me to analyze this further using AI? (Y/N)',
-            'steps': steps
+            'steps': steps,
+            'method': 'simple_search'
         })
 
     # Handle AI analysis confirmation
@@ -344,7 +414,8 @@ def ask():
             })
         
         # User wants to include markdown files, show selection
-        md_files = [f for f in os.listdir('./knowledge_base') if f.endswith('.md')]
+        # Use the already-loaded knowledge base to show all files with folder structure
+        md_files = [doc['filename'] for doc in kb]  # This includes folder paths
         numbered_files = [f"{i+1}. {file}" for i, file in enumerate(md_files)]
         numbered_files.append(f"{len(md_files) + 1}. All files")
         
@@ -393,12 +464,19 @@ def ask():
         if files_to_include:
             for filename in files_to_include:
                 try:
-                    file_path = os.path.join('./knowledge_base', filename)
-                    print(f"DEBUG: Reading file: {file_path}")
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        print(f"DEBUG: File {filename} content length: {len(content)}")
-                        context_docs.append({"content": content})
+                    # Find the file in the knowledge base to get its full path
+                    file_doc = next((doc for doc in kb if doc['filename'] == filename), None)
+                    if file_doc:
+                        # Use the full_path from the knowledge base
+                        file_path = file_doc['full_path']
+                        print(f"DEBUG: Reading file: {file_path}")
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            print(f"DEBUG: File {filename} content length: {len(content)}")
+                            context_docs.append({"content": content})
+                    else:
+                        print(f"DEBUG: File {filename} not found in knowledge base")
+                        steps.append(f"File {filename} not found in knowledge base")
                 except Exception as e:
                     print(f"Error reading file {filename}: {e}")
                     steps.append(f"Error reading file {filename}: {e}")
@@ -424,14 +502,21 @@ def ask():
 def get_document(filename):
     """Get the full content of a specific document"""
     try:
-        with open(os.path.join('./knowledge_base', filename), 'r', encoding='utf-8') as f:
-            content = f.read()
-            return jsonify({
-                'filename': filename,
-                'content': content
-            })
-    except FileNotFoundError:
-        return jsonify({'error': 'Document not found'}), 404
+        # Find the file in the knowledge base to get its full path
+        file_doc = next((doc for doc in kb if doc['filename'] == filename), None)
+        if file_doc:
+            # Use the full_path from the knowledge base
+            file_path = file_doc['full_path']
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return jsonify({
+                    'filename': filename,
+                    'content': content
+                })
+        else:
+            return jsonify({'error': 'Document not found'}), 404
+    except Exception as e:
+        return jsonify({'error': f'Error reading document: {str(e)}'}), 500
 if __name__ == "__main__":
     print(f"Starting server... Knowledge base loaded with {len(kb)} documents.")
     app.run(host='0.0.0.0', port=5557)

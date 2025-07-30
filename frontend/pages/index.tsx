@@ -369,7 +369,15 @@ export default function Home() {
                 {answer.sources.map((source: Source, index: number) => (
                   <div key={index} className={answerStyles.sourceItem}>
                     <div className={answerStyles.sourceHeader}>
-                      <strong>{source.filename}</strong> 
+                      <strong>
+                        {source.folder_path && source.folder_path !== 'root' 
+                          ? `${source.folder_path}/${source.filename.split('/').pop()}`
+                          : source.filename
+                        }
+                      </strong> 
+                      {source.folder_path && source.folder_path !== 'root' && (
+                        <span className={answerStyles.folderPath}> (in {source.folder_path})</span>
+                      )}
                       {source.header && <span> - {source.header}</span>}
                       <span className={answerStyles.relevance}>Relevance: {source.relevance}%</span>
                     </div>

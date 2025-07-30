@@ -1,208 +1,192 @@
 # AI Knowledge Base Analyzer
 
-A sophisticated AI-powered knowledge base analyzer that combines local document search with Gemini's web search capabilities to provide comprehensive answers to user questions.
+An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers with web search capabilities.
 
-## 🚀 Features
+## Features
 
-### Core Functionality
-- **Local Knowledge Base Search**: Searches through your local markdown files for relevant information
-- **AI-Powered Analysis**: Uses Google's Gemini AI for enhanced analysis and web search
-- **Interactive Step-by-Step Flow**: Guided process for refining questions and selecting relevant documents
-- **Web Search Integration**: Automatically searches the web when local context is insufficient
-- **Beautiful UI**: Modern, responsive interface with formatted responses
+- **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
+- **AI-Powered Analysis**: Uses CrewAI for multi-agent analysis of local content
+- **Web Search Integration**: Gemini AI with built-in web search capabilities
+- **Folder Structure Support**: Displays folder paths for better organization
+- **Modal Document Viewer**: View full documents with proper overlay
+- **Multi-Step AI Flow**: Guided process for AI analysis with file selection
 
-### Key Capabilities
-- **Document Selection**: Choose which files to include in your analysis
-- **Message Refinement**: Modify your question before sending to AI
-- **Structured Responses**: Color-coded sections showing local vs web search results
-- **Source Tracking**: View which documents contributed to the answer
-- **Modal Document Viewer**: Full-screen view of source documents
+## Docker Setup
 
-## 🏗️ Architecture
+This application is containerized for easy deployment and consistent environments.
 
-### Frontend
-- **Next.js** with TypeScript
-- **React** for UI components
-- **CSS Modules** for styling
-- **Axios** for API communication
+### Quick Start
 
-### Backend
-- **Python Flask** server
-- **Google Generative AI** (Gemini) integration
-- **Local file system** for knowledge base storage
-- **CORS** enabled for frontend communication
-
-## 📁 Project Structure
-
-```
-my_ai_project/
-├── frontend/                 # Next.js React application
-│   ├── components/          # React components
-│   ├── pages/              # Next.js pages
-│   ├── styles/             # CSS modules
-│   └── types.ts            # TypeScript type definitions
-├── knowledge_base/          # Your markdown documents
-├── server.py               # Flask backend server
-├── requirements.txt        # Python dependencies
-└── .gitignore             # Git ignore rules
-```
-
-## 🛠️ Setup Instructions
-
-### Prerequisites
-- Node.js (v16 or higher)
-- Python (v3.8 or higher)
-- Google AI API key
-
-### Installation
-
-1. **Clone the repository**
+1. **Build the containers:**
    ```bash
-   git clone <your-repo-url>
-   cd my_ai_project
+   chmod +x build_docker.sh
+   ./build_docker.sh
    ```
 
-2. **Set up the backend**
+2. **Start the application:**
    ```bash
-   # Create virtual environment
+   docker-compose up
+   ```
+
+3. **Access the application:**
+   - Frontend: http://localhost:5556
+   - Backend: http://localhost:5557
+
+### Manual Build
+
+If you prefer to build manually:
+
+```bash
+# Build backend
+docker-compose build backend
+
+# Build frontend  
+docker-compose build frontend
+
+# Start services
+docker-compose up
+```
+
+### Docker Features
+
+- **Python 3.11**: Compatible with latest CrewAI versions
+- **Flexible Dependencies**: Automatic fallback installation if bulk install fails
+- **Graceful Degradation**: Falls back to simple search if CrewAI unavailable
+- **Volume Mounting**: Knowledge base mounted as volume for easy updates
+
+## Local Development Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 16+
+- Ollama (optional, for local AI models)
+
+### Backend Setup
+
+1. **Create virtual environment:**
+   ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   # Install dependencies
+   ```
+
+2. **Install dependencies:**
+   ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up the frontend**
+3. **Set up environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your GEMINI_API_KEY
+   ```
+
+4. **Start the backend:**
+   ```bash
+   python server.py
+   ```
+
+### Frontend Setup
+
+1. **Install dependencies:**
    ```bash
    cd frontend
    npm install
    ```
 
-4. **Configure environment variables**
-   Create a `.env` file in the root directory:
-   ```env
-   GOOGLE_API_KEY=your_gemini_api_key_here
+2. **Start the frontend:**
+   ```bash
+   npm run dev
    ```
 
-5. **Add your knowledge base documents**
-   Place your markdown files in the `knowledge_base/` directory
+## Knowledge Base Structure
 
-## 🚀 Running the Application
+Place your markdown files in the `knowledge_base` folder:
 
-### Start the backend server
-```bash
-# From the root directory
-python server.py
 ```
-The server will run on `http://localhost:5557`
-
-### Start the frontend development server
-```bash
-# From the frontend directory
-npm run dev
+knowledge_base/
+├── general/
+│   ├── overview.md
+│   └── guidelines.md
+├── technical/
+│   ├── api-docs.md
+│   └── setup.md
+└── root-file.md
 ```
-The frontend will run on `http://localhost:3000`
 
-## 📖 Usage
+The system will:
+- Recursively search all subfolders
+- Display folder paths in search results
+- Support nested organization
 
-### Basic Workflow
+## AI Integration
 
-1. **Ask a Question**: Enter your question in the input field and click "Ask Question"
+### CrewAI Multi-Agent System
 
-2. **Local Search**: The system first searches your local knowledge base for relevant information
+The application uses CrewAI for sophisticated local knowledge base analysis:
 
-3. **AI Analysis Decision**: Choose whether to use AI for enhanced analysis
-   - **Yes**: Proceed with AI-powered analysis
-   - **No**: Keep the local search results
+- **Research Agent**: Finds relevant information
+- **Content Analyst**: Synthesizes and structures answers
+- **Quality Assurance**: Validates accuracy and completeness
 
-4. **Document Selection** (if using AI): Select which files to include in the analysis
+### 🔒 API Key Security
 
-5. **Message Refinement** (optional): Modify your question before sending to AI
+**Important**: Your Gemini API key is **NEVER** used during CrewAI operations:
 
-6. **Get Comprehensive Answer**: Receive a formatted response with:
-   - Local knowledge base findings
-   - Web search results (if needed)
-   - Combined comprehensive answer
-   - Source document references
+- **CrewAI**: Uses only local Ollama models (no API calls)
+- **Web Search**: Gemini API key is only used for web search functionality
+- **Complete Separation**: CrewAI and web search are completely independent
 
-### Response Format
+This ensures your API key is only used when you explicitly choose web search, not during local knowledge base analysis.
 
-The AI responses are formatted with color-coded sections:
-- **🔵 Local Knowledge Base**: Information found in your markdown files
-- **🟡 Web Search Results**: Information found through web search
-- **🟢 Comprehensive Answer**: Final combined response
+### Fallback Options
 
-## 🔧 Configuration
+If CrewAI is unavailable, the system gracefully falls back to:
+1. Simple keyword search
+2. Basic document matching
+3. Manual file selection for AI analysis
 
-### Knowledge Base
-- Place your markdown files in the `knowledge_base/` directory
-- Supported formats: `.md` files
-- Files are automatically indexed and searchable
+### Web Search Integration
 
-### API Configuration
-- Update `GOOGLE_API_KEY` in your `.env` file
-- The system uses Gemini 1.5 Flash for optimal performance
+When local knowledge is insufficient, Gemini can:
+- Search the web for additional information
+- Provide citations and sources
+- Combine local and web knowledge
 
-## 🎨 UI Features
+## API Endpoints
 
-### Responsive Design
-- Works on desktop, tablet, and mobile devices
-- Modern, clean interface with intuitive navigation
+- `POST /ask` - Main query endpoint
+- `GET /document/<filename>` - Get full document content
+- `GET /status` - Service status
 
-### Document Viewer
-- Click "View Full Document" to see complete source files
-- Modal overlay with proper formatting
-- Easy close functionality
+## Troubleshooting
 
-### Step-by-Step Flow
-- Clear progress indicators
-- Confirmation steps for important decisions
-- Ability to go back and modify selections
+### Docker Issues
 
-## 🔒 Security
+1. **Build failures**: Try `docker-compose build --no-cache`
+2. **Permission issues**: Ensure Docker has access to the project directory
+3. **Port conflicts**: Change ports in `docker-compose.yml`
 
-- API keys are stored in environment variables
-- CORS is properly configured for local development
-- No sensitive data is logged or stored
+### Dependency Issues
 
-## 🐛 Troubleshooting
+1. **Python version conflicts**: The Docker setup uses Python 3.11 for compatibility
+2. **CrewAI installation**: The system includes fallback options if CrewAI fails
+3. **Ollama setup**: Optional - Gemini is used as fallback
 
-### Common Issues
+### Common Solutions
 
-1. **"Large files detected" error**
-   - The repository has been cleaned of `node_modules`
-   - Use the provided `.gitignore` to prevent future issues
+- **Clear Docker cache**: `docker system prune -a`
+- **Rebuild containers**: `docker-compose down && docker-compose build --no-cache`
+- **Check logs**: `docker-compose logs -f backend`
 
-2. **API key errors**
-   - Ensure your `GOOGLE_API_KEY` is set in the `.env` file
-   - Verify the API key has access to Gemini
-
-3. **No documents found**
-   - Check that your markdown files are in the `knowledge_base/` directory
-   - Ensure files have `.md` extensions
-
-4. **Frontend not connecting to backend**
-   - Verify the Flask server is running on port 5557
-   - Check CORS configuration if needed
-
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test thoroughly
+4. Test with Docker: `./build_docker.sh && docker-compose up`
 5. Submit a pull request
 
-## 📄 License
+## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-## 🙏 Acknowledgments
-
-- Google Generative AI for providing the Gemini API
-- Next.js team for the excellent React framework
-- Flask team for the Python web framework
-
----
-
-**Note**: This project is designed for personal knowledge base analysis. Ensure you have proper API usage limits and costs configured for your Google AI account.
+This project is licensed under the MIT License.

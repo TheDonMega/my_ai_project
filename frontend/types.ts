@@ -1,5 +1,6 @@
 export interface Source {
   filename: string;
+  folder_path?: string;
   relevance: number;
   header?: string;
   content: string;

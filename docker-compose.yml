@@ -11,6 +11,10 @@ services:
       - ./knowledge_base:/app/knowledge_base
     env_file:
       - .env
+    environment:
+      - PIP_NO_CACHE_DIR=1
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - PYTHONUNBUFFERED=1
 
   frontend:
     build:

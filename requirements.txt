@@ -1,4 +1,22 @@
-google-generativeai>=0.8.0
+# Core dependencies
+google-generativeai
 python-dotenv
 flask
 flask-cors
+
+# CrewAI and LangChain ecosystem (flexible versions for Docker)
+crewai
+langchain
+langchain-community
+langchain-core
+
+# Vector store and embeddings
+chromadb
+sentence-transformers
+
+# Local AI models
+ollama
+
+# Additional dependencies for CrewAI
+pydantic
+typing-extensions

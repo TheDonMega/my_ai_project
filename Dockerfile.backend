@@ -1,12 +1,35 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements files
+COPY requirements.txt .
+
+# Install Python dependencies with fallback
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt || \
+    (echo "Retrying with individual packages..." && \
+     pip install --no-cache-dir google-generativeai python-dotenv flask flask-cors && \
+     pip install --no-cache-dir crewai langchain langchain-community langchain-core && \
+     pip install --no-cache-dir chromadb sentence-transformers ollama && \
+     pip install --no-cache-dir pydantic typing-extensions)
+
+# Copy application files
 COPY server.py .
+COPY crewai_analyzer.py .
 COPY knowledge_base ./knowledge_base
 COPY .env .
+
+# Create chroma_db directory
+RUN mkdir -p chroma_db
+
+EXPOSE 5557
 
 CMD ["python", "server.py"]
