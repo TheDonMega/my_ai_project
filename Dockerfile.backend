@@ -24,12 +24,25 @@ RUN pip install --upgrade pip && \
 # Copy application files
 COPY server.py .
 COPY crewai_analyzer.py .
+COPY startup_ollama.py .
 COPY knowledge_base ./knowledge_base
 COPY .env .
 
 # Create chroma_db directory
 RUN mkdir -p chroma_db
 
+# Create startup script
+RUN echo '#!/bin/bash\n\
+echo "🚀 Starting backend with Ollama model check..."\n\
+python startup_ollama.py\n\
+if [ $? -eq 0 ]; then\n\
+    echo "✅ Ollama models ready, starting server..."\n\
+    python server.py\n\
+else\n\
+    echo "❌ Ollama model setup failed"\n\
+    exit 1\n\
+fi' > /app/start.sh && chmod +x /app/start.sh
+
 EXPOSE 5557
 
-CMD ["python", "server.py"]
+CMD ["/app/start.sh"]

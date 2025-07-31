@@ -13,46 +13,62 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
 
 ## Docker Setup
 
-This application is containerized for easy deployment and consistent environments.
+This application is containerized for easy deployment and consistent environments. The setup includes Ollama for local AI processing.
 
 ### Quick Start
 
-1. **Build the containers:**
+1. **Build and start all services:**
    ```bash
    chmod +x build_docker.sh
    ./build_docker.sh
    ```
 
-2. **Start the application:**
-   ```bash
-   docker-compose up
-   ```
-
-3. **Access the application:**
+2. **Access the application:**
    - Frontend: http://localhost:5556
    - Backend: http://localhost:5557
+   - Ollama: http://localhost:11434
 
-### Manual Build
+### Manual Setup
 
 If you prefer to build manually:
 
 ```bash
-# Build backend
-docker-compose build backend
-
-# Build frontend  
-docker-compose build frontend
+# Build all containers
+docker-compose build
 
 # Start services
-docker-compose up
+docker-compose up -d
+
+# Wait for Ollama to start, then pull models
+python setup_docker_ollama.py
 ```
+
+### Docker Architecture
+
+The setup includes three services:
+
+- **Ollama**: Local AI model server (llama2, mistral, etc.)
+- **Backend**: Python Flask server with CrewAI integration
+- **Frontend**: Next.js React application
+
+### Ollama Models
+
+The system uses Ollama for local AI processing:
+
+- **llama2** (default): Good general-purpose model
+- **mistral**: Faster, smaller alternative
+- **codellama**: Specialized for code analysis
+
+To change models, edit `crewai_analyzer.py` and update the `model_name` variable.
 
 ### Docker Features
 
 - **Python 3.11**: Compatible with latest CrewAI versions
+- **Ollama Integration**: Local AI models for privacy and speed
 - **Flexible Dependencies**: Automatic fallback installation if bulk install fails
 - **Graceful Degradation**: Falls back to simple search if CrewAI unavailable
 - **Volume Mounting**: Knowledge base mounted as volume for easy updates
+- **Persistent Models**: Ollama models stored in Docker volume
 
 ## Local Development Setup
 

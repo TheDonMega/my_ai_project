@@ -4,6 +4,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Knowledge base (excluded from version control)
+knowledge_base/
+
 # Python
 __pycache__/
 *.py[cod]

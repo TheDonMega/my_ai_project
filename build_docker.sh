@@ -34,14 +34,25 @@ fi
 
 echo "🎉 All containers built successfully!"
 echo ""
-echo "🚀 To start the application:"
-echo "   docker-compose up"
+echo "🚀 Starting services..."
+docker-compose up -d
+
 echo ""
-echo "🔧 To run in background:"
-echo "   docker-compose up -d"
+echo "⏳ Waiting for Ollama service to start..."
+sleep 10
+
+echo ""
+echo "📥 Setting up Ollama models..."
+python setup_docker_ollama.py
+
+echo ""
+echo "🎉 Setup completed!"
 echo ""
 echo "📊 To view logs:"
 echo "   docker-compose logs -f"
 echo ""
-echo "🧹 To clean up:"
-echo "   docker-compose down" 
+echo "🔧 To stop services:"
+echo "   docker-compose down"
+echo ""
+echo "💡 To check Ollama models:"
+echo "   docker exec ollama-ai-project ollama list" 

@@ -283,75 +283,121 @@ def ask():
     # Handle the initial question - search local markdown only
     if 'step' not in data or data['step'] == 'initial':
         steps.append(f"Searching knowledge base with {len(kb)} documents...")
+        
+        method = data.get('method', 'local_search')
+        
+        if method == 'ai_analysis':
+            # Use CrewAI for AI analysis
+            if CREWAI_AVAILABLE:
+                try:
+                    print("🤖 Using CrewAI for local knowledge base analysis...")
+                    # Use the correct knowledge base path for Docker container
+                    crewai_analyzer = get_crewai_analyzer("/app/knowledge_base")
+                    crewai_result = crewai_analyzer.analyze_query(user_question)
+                    
+                    if crewai_result and crewai_result.get('answer'):
+                        steps.append("CrewAI multi-agent analysis completed")
+                        return jsonify({
+                            'answer': crewai_result['answer'],
+                            'sources': crewai_result.get('sources', []),
+                            'next_step': None,  # No further steps for AI analysis
+                            'steps': steps,
+                            'method': crewai_result.get('method', 'crewai')
+                        })
+                    else:
+                        print("⚠️  CrewAI returned no results, falling back to simple search")
+                except Exception as e:
+                    print(f"⚠️  CrewAI analysis failed: {e}, falling back to simple search")
+            
+            # Fallback to simple search if CrewAI fails
+            relevant_docs = search_knowledge_base(user_question, kb)
+            
+            if not relevant_docs:
+                steps.append("No relevant documents found in knowledge base.")
+                return jsonify({
+                    'answer': "I couldn't find any relevant information in the local knowledge base.",
+                    'sources': [],
+                    'next_step': None,
+                    'steps': steps,
+                    'method': 'simple_fallback'
+                })
 
-    # Initial search in knowledge base
-    if data.get('step') == 'initial' or 'step' not in data:
-        # Try CrewAI first if available
-        if CREWAI_AVAILABLE:
-            try:
-                print("🤖 Using CrewAI for local knowledge base analysis...")
-                crewai_analyzer = get_crewai_analyzer()
-                crewai_result = crewai_analyzer.analyze_query(user_question)
-                
-                if crewai_result and crewai_result.get('answer'):
-                    steps.append("CrewAI multi-agent analysis completed")
-                    return jsonify({
-                        'answer': crewai_result['answer'],
-                        'sources': crewai_result.get('sources', []),
-                        'next_step': 'ask_ai',
-                        'prompt': 'Would you like me to analyze this further using AI? (Y/N)',
-                        'steps': steps,
-                        'method': crewai_result.get('method', 'crewai')
-                    })
+            # Found relevant docs in knowledge base
+            steps.append(f"Found {len(relevant_docs)} relevant document sections")
+            
+            # Format the answer to show folder structure clearly
+            answer_parts = []
+            for doc in relevant_docs[:2]:
+                if doc['folder_path'] == 'root':
+                    location = f"From {doc['filename']}"
                 else:
-                    print("⚠️  CrewAI returned no results, falling back to simple search")
-            except Exception as e:
-                print(f"⚠️  CrewAI analysis failed: {e}, falling back to simple search")
-        
-        # Fallback to original search method
-        relevant_docs = search_knowledge_base(user_question, kb)
-        
-        if not relevant_docs:
-            steps.append("No relevant documents found in knowledge base.")
+                    location = f"From {doc['folder_path']}/{doc['filename'].split('/')[-1]}"
+                answer_parts.append(f"{location}:\n{doc['section']}")
+            
+            answer = "Based on the local knowledge base:\n\n" + "\n\n".join(answer_parts)
+            
+            sources = [{
+                'filename': doc['filename'],
+                'folder_path': doc['folder_path'],
+                'relevance': doc['relevance'],
+                'header': doc['header'] if doc['header'] else 'No header',
+                'content': doc['section'],
+                'full_document_available': True
+            } for doc in relevant_docs]
+
             return jsonify({
-                'answer': "I couldn't find any relevant information in the local knowledge base.",
-                'sources': [],
-                'next_step': 'ask_ai',
-                'prompt': 'Would you like me to analyze your question using AI? (Y/N)',
-                'steps': steps
+                'answer': answer,
+                'sources': sources,
+                'next_step': None,
+                'steps': steps,
+                'method': 'simple_fallback'
             })
+        
+        else:
+            # Local search - use simple search directly (no CrewAI)
+            relevant_docs = search_knowledge_base(user_question, kb)
+            
+            if not relevant_docs:
+                steps.append("No relevant documents found in knowledge base.")
+                return jsonify({
+                    'answer': "I couldn't find any relevant information in the local knowledge base.",
+                    'sources': [],
+                    'next_step': 'ask_ai',
+                    'prompt': 'Would you like me to analyze your question using AI? (Y/N)',
+                    'steps': steps
+                })
 
-        # Found relevant docs in knowledge base
-        steps.append(f"Found {len(relevant_docs)} relevant document sections")
-        
-        # Format the answer to show folder structure clearly
-        answer_parts = []
-        for doc in relevant_docs[:2]:
-            if doc['folder_path'] == 'root':
-                location = f"From {doc['filename']}"
-            else:
-                location = f"From {doc['folder_path']}/{doc['filename'].split('/')[-1]}"
-            answer_parts.append(f"{location}:\n{doc['section']}")
-        
-        answer = "Based on the local knowledge base:\n\n" + "\n\n".join(answer_parts)
-        
-        sources = [{
-            'filename': doc['filename'],
-            'folder_path': doc['folder_path'],
-            'relevance': doc['relevance'],
-            'header': doc['header'] if doc['header'] else 'No header',
-            'content': doc['section'],
-            'full_document_available': True
-        } for doc in relevant_docs]
+            # Found relevant docs in knowledge base
+            steps.append(f"Found {len(relevant_docs)} relevant document sections")
+            
+            # Format the answer to show folder structure clearly
+            answer_parts = []
+            for doc in relevant_docs[:2]:
+                if doc['folder_path'] == 'root':
+                    location = f"From {doc['filename']}"
+                else:
+                    location = f"From {doc['folder_path']}/{doc['filename'].split('/')[-1]}"
+                answer_parts.append(f"{location}:\n{doc['section']}")
+            
+            answer = "Based on the local knowledge base:\n\n" + "\n\n".join(answer_parts)
+            
+            sources = [{
+                'filename': doc['filename'],
+                'folder_path': doc['folder_path'],
+                'relevance': doc['relevance'],
+                'header': doc['header'] if doc['header'] else 'No header',
+                'content': doc['section'],
+                'full_document_available': True
+            } for doc in relevant_docs]
 
-        return jsonify({
-            'answer': answer,
-            'sources': sources,
-            'next_step': 'ask_ai',
-            'prompt': 'Would you like me to analyze this further using AI? (Y/N)',
-            'steps': steps,
-            'method': 'simple_search'
-        })
+            return jsonify({
+                'answer': answer,
+                'sources': sources,
+                'next_step': 'ask_ai',
+                'prompt': 'Would you like me to analyze this further using Gemini AI with web search? (Y/N)',
+                'steps': steps,
+                'method': 'simple_search'
+            })
 
     # Handle AI analysis confirmation
     elif data['step'] == 'ask_ai':

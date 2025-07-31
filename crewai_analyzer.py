@@ -22,9 +22,19 @@ class CrewAIAnalyzer:
             from langchain_community.llms import Ollama
             from langchain_community.embeddings import OllamaEmbeddings
             
-            self.llm = Ollama(model="llama2")
-            self.embeddings = OllamaEmbeddings(model="llama2")
-            print("✅ Using local Ollama model: llama2 for CrewAI")
+            # Get Ollama base URL from environment (for Docker) or use default
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            
+            # You can change this model name to use different models:
+            # - "llama2" (default)
+            # - "mistral" (faster, smaller)
+            # - "codellama" (good for code)
+            # - "llama2:13b" (larger, more capable)
+            model_name = "mistral"
+            
+            self.llm = Ollama(model=model_name, base_url=ollama_base_url)
+            self.embeddings = OllamaEmbeddings(model=model_name, base_url=ollama_base_url)
+            print(f"✅ Using local Ollama model: {model_name} for CrewAI (URL: {ollama_base_url})")
         except Exception as e:
             print(f"⚠️  Ollama not available for CrewAI: {e}")
             print("🔒 CrewAI will not be available - will fall back to simple search")
@@ -104,9 +114,17 @@ class CrewAIAnalyzer:
         return documents
     
     def create_agents(self) -> Dict[str, Any]:
-        """Create specialized agents for different analysis tasks"""
+        """Create CrewAI agents"""
         try:
-            from crewai import Agent
+            from crewai import Agent, Task, Crew
+            from langchain.tools import Tool
+            
+            # Create the search tool
+            search_tool = Tool(
+                name="search_knowledge_base",
+                description="Search the knowledge base for relevant information",
+                func=self.search_knowledge_base_tool
+            )
             
             # Research Agent - Finds relevant information
             research_agent = Agent(
@@ -117,7 +135,7 @@ class CrewAIAnalyzer:
                 verbose=False,
                 allow_delegation=False,
                 llm=self.llm,
-                tools=[self.search_knowledge_base_tool]
+                tools=[search_tool]
             )
             
             # Analysis Agent - Analyzes and synthesizes information
@@ -343,9 +361,9 @@ class CrewAIAnalyzer:
 # Global instance
 crewai_analyzer = None
 
-def get_crewai_analyzer():
+def get_crewai_analyzer(knowledge_base_path: str = "./knowledge_base"):
     """Get or create the CrewAI analyzer instance"""
     global crewai_analyzer
     if crewai_analyzer is None:
-        crewai_analyzer = CrewAIAnalyzer()
+        crewai_analyzer = CrewAIAnalyzer(knowledge_base_path)
     return crewai_analyzer 

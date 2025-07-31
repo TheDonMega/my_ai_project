@@ -47,6 +47,12 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // This will be replaced by separate handlers
+  };
+
+  const handleLocalSearch = async () => {
+    if (!question.trim()) return;
+    
     setLoading(true);
     setAnswer(null);
     setProcessingStep('Searching knowledge base...');
@@ -54,7 +60,49 @@ export default function Home() {
     try {
       const response = await axios.post('http://localhost:5557/ask', { 
         question,
-        step: 'initial'
+        step: 'initial',
+        method: 'local_search'
+      });
+      
+      if (response.data.steps) {
+        for (const step of response.data.steps) {
+          setProcessingStep(step);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      setAnswer(response.data);
+      if (response.data.next_step) {
+        setCurrentStep({
+          step: response.data.next_step,
+          prompt: response.data.prompt,
+          current_message: question
+        });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setAnswer({
+        answer: 'Error occurred while fetching the answer.',
+        sources: []
+      });
+    }
+    
+    setProcessingStep('');
+    setLoading(false);
+  };
+
+  const handleAIAnalysis = async () => {
+    if (!question.trim()) return;
+    
+    setLoading(true);
+    setAnswer(null);
+    setProcessingStep('Analyzing with AI...');
+    
+    try {
+      const response = await axios.post('http://localhost:5557/ask', { 
+        question,
+        step: 'initial',
+        method: 'ai_analysis'
       });
       
       if (response.data.steps) {
@@ -196,16 +244,31 @@ export default function Home() {
         </div>
       )}
       
-      <form className={styles.questionForm} onSubmit={handleSubmit}>
+      <form className={styles.form}>
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="Ask your question here..."
           rows={4}
         />
-        <button className={styles.button} type="submit" disabled={loading}>
-          {loading ? 'Processing...' : 'Ask Question'}
-        </button>
+        <div className={styles.buttonContainer}>
+          <button 
+            type="button" 
+            className={styles.localSearchButton} 
+            onClick={handleLocalSearch}
+            disabled={loading || !question.trim()}
+          >
+            {loading ? 'Processing...' : 'Search Locally'}
+          </button>
+          <button 
+            type="button" 
+            className={styles.aiAnalysisButton} 
+            onClick={handleAIAnalysis}
+            disabled={loading || !question.trim()}
+          >
+            {loading ? 'Processing...' : 'Use AI Locally'}
+          </button>
+        </div>
       </form>
 
       {processingStep && (
