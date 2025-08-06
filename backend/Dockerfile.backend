@@ -32,11 +32,9 @@ RUN pip install --upgrade pip && \
 COPY backend/server.py .
 COPY backend/crewai_analyzer.py .
 COPY backend/startup_ollama.py .
-COPY backend/train_knowledge_base.py .
 COPY backend/feedback_system.py .
-COPY backend/ollama_trainer.py .
 COPY backend/llamaindex_manager.py .
-COPY backend/hybrid_search.py .
+COPY backend/search_manager.py .
 
 # Create knowledge base directory (will be mounted as volume)
 RUN mkdir -p /app/knowledge_base
@@ -49,9 +47,7 @@ RUN echo '#!/bin/bash\n\
 echo "🚀 Starting backend with Ollama model check..."\n\
 python startup_ollama.py\n\
 if [ $? -eq 0 ]; then\n\
-    echo "✅ Ollama models ready, training knowledge base..."\n\
-    python train_knowledge_base.py\n\
-    echo "✅ Knowledge base training completed, starting server..."\n\
+    echo "✅ Ollama models ready, starting server..."\n\
     python server.py\n\
 else\n\
     echo "❌ Ollama model setup failed"\n\
