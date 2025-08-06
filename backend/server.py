@@ -2,6 +2,7 @@
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+import time # Added for fast_llamaindex_query
 
 # Import CrewAI analyzer
 try:
@@ -30,9 +31,19 @@ except ImportError as e:
     OLLAMA_AVAILABLE = False
     print(f"⚠️  Ollama trainer not available: {e}")
 
+# Import LlamaIndex hybrid search system
+try:
+    import hybrid_search
+    HYBRID_SEARCH_AVAILABLE = True
+    print("✅ Hybrid search system available")
+except ImportError as e:
+    HYBRID_SEARCH_AVAILABLE = False
+    print(f"⚠️  Hybrid search system not available: {e}")
+
 # Global variables for performance optimization
 OLLAMA_AVAILABLE = False
 OLLAMA_TRAINER = None
+HYBRID_SEARCH_SYSTEM = None
 MODEL_PRELOADED = False
 PERSONALITY_PROMPT = ""
 kb = []  # Global knowledge base variable
@@ -95,6 +106,31 @@ try:
         print("⚠️ Ollama trainer not available: Ollama is not running or accessible")
 except ImportError as e:
     print(f"⚠️ Ollama trainer not available: {e}")
+
+# Initialize Hybrid Search System on startup
+try:
+    if HYBRID_SEARCH_AVAILABLE:
+        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        embedding_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+        llm_model = os.getenv("LLM_MODEL", "llama2")
+        use_chroma = os.getenv("USE_CHROMA", "true").lower() == "true"
+        hybrid_weight = float(os.getenv("HYBRID_WEIGHT", "0.7"))
+        
+        HYBRID_SEARCH_SYSTEM = hybrid_search.HybridSearchSystem(
+            knowledge_base_path="/app/knowledge_base",
+            vector_store_path="/app/vector_store",
+            ollama_base_url=ollama_url,
+            embedding_model=embedding_model,
+            llm_model=llm_model,
+            use_chroma=use_chroma,
+            hybrid_weight=hybrid_weight
+        )
+        print("✅ Hybrid search system initialized")
+    else:
+        print("⚠️ Hybrid search system not available")
+except Exception as e:
+    print(f"⚠️ Error initializing hybrid search system: {e}")
+    HYBRID_SEARCH_SYSTEM = None
 
 # Load personality prompt on startup
 load_personality_prompt()
@@ -399,10 +435,28 @@ reload_knowledge_base()
 
 @app.route('/status', methods=['GET'])
 def status():
-    return jsonify({
+    """Get system status"""
+    status_data = {
         'status': 'running',
-        'documents_loaded': reload_knowledge_base()
-    })
+        'documents_loaded': reload_knowledge_base(),
+        'knowledge_base_documents': len(kb),
+        'crewai_available': CREWAI_AVAILABLE,
+        'ollama_available': OLLAMA_AVAILABLE,
+        'feedback_available': FEEDBACK_AVAILABLE,
+        'personality_loaded': bool(PERSONALITY_PROMPT),
+        'model_preloaded': MODEL_PRELOADED,
+        'hybrid_search_available': HYBRID_SEARCH_AVAILABLE
+    }
+    
+    # Add LlamaIndex status if available
+    if HYBRID_SEARCH_SYSTEM:
+        llamaindex_stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
+        status_data.update({
+            'llamaindex_available': llamaindex_stats['llamaindex_available'],
+            'llamaindex_stats': llamaindex_stats
+        })
+    
+    return jsonify(status_data)
 
 @app.route('/ask', methods=['POST'])
 def ask():
@@ -443,12 +497,41 @@ def ask():
                             'method': crewai_result.get('method', 'crewai')
                         })
                     else:
-                        print("⚠️  CrewAI returned no results, falling back to simple search")
+                        print("⚠️  CrewAI returned no results, falling back to hybrid search")
                 except Exception as e:
-                    print(f"⚠️  CrewAI analysis failed: {e}, falling back to simple search")
+                    print(f"⚠️  CrewAI analysis failed: {e}, falling back to hybrid search")
             
-            # Fallback to simple search if CrewAI fails
-            relevant_docs = search_knowledge_base(user_question, kb)
+            # Use hybrid search if available, otherwise fallback to simple search
+            if HYBRID_SEARCH_SYSTEM and HYBRID_SEARCH_SYSTEM.llamaindex_available:
+                print("🔍 Using Hybrid Search System")
+                search_results = HYBRID_SEARCH_SYSTEM.search(
+                    query=user_question,
+                    knowledge_base=kb,
+                    search_mode='hybrid',
+                    num_results=5,
+                    similarity_threshold=0.6
+                )
+                
+                if search_results['results']:
+                    relevant_docs = []
+                    for result in search_results['results']:
+                        relevant_docs.append({
+                            'section': result['content'],
+                            'filename': result['filename'],
+                            'score': result['score'],
+                            'relevance': result.get('relevance', result['score']),
+                            'folder_path': result.get('folder_path', ''),
+                            'header': result.get('header', ''),
+                            'source_type': result.get('source_type', 'hybrid')
+                        })
+                    steps.append(f"Hybrid search found {len(relevant_docs)} relevant sections")
+                else:
+                    print("❌ No relevant content found with hybrid search, falling back to keyword search")
+                    relevant_docs = search_knowledge_base(user_question, kb)
+                    steps.append("Falling back to keyword search")
+            else:
+                print("🔍 Using Traditional Keyword Search")
+                relevant_docs = search_knowledge_base(user_question, kb)
             
             if not relevant_docs:
                 steps.append("No relevant documents found in knowledge base.")
@@ -1137,6 +1220,387 @@ def reload_knowledge_base_endpoint():
         return jsonify({
             'success': False,
             'error': f'Failed to reload knowledge base: {str(e)}'
+        }), 500
+
+# --- LlamaIndex and Hybrid Search Endpoints ---
+
+@app.route('/llamaindex/status', methods=['GET'])
+def llamaindex_status():
+    """Get LlamaIndex system status"""
+    try:
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'Hybrid search system not available'
+            })
+        
+        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
+        return jsonify({
+            'success': True,
+            'llamaindex_available': stats['llamaindex_available'],
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/llamaindex/rebuild', methods=['POST'])
+def rebuild_llamaindex():
+    """Rebuild LlamaIndex"""
+    try:
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'Hybrid search system not available'
+            })
+        
+        data = request.get_json() or {}
+        force_rebuild = data.get('force_rebuild', True)
+        
+        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/search/hybrid', methods=['POST'])
+def hybrid_search():
+    """Perform hybrid search using LlamaIndex and keyword search"""
+    try:
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Query is required'
+            }), 400
+        
+        query = data['query']
+        search_mode = data.get('search_mode', 'hybrid')  # hybrid, llamaindex, keyword, fallback
+        num_results = data.get('num_results', 5)
+        similarity_threshold = data.get('similarity_threshold', 0.6)
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'Hybrid search system not available'
+            })
+        
+        # Perform hybrid search
+        search_results = HYBRID_SEARCH_SYSTEM.search(
+            query=query,
+            knowledge_base=kb,
+            search_mode=search_mode,
+            num_results=num_results,
+            similarity_threshold=similarity_threshold
+        )
+        
+        return jsonify({
+            'success': True,
+            'search_results': search_results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/search/llamaindex', methods=['POST'])
+def llamaindex_query():
+    """Query using LlamaIndex RAG pipeline"""
+    try:
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Query is required'
+            }), 400
+        
+        query = data['query']
+        use_cache = data.get('use_cache', True)
+        similarity_threshold = data.get('similarity_threshold', 0.7)
+        top_k = data.get('top_k', 5)
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'Hybrid search system not available'
+            })
+        
+        # Query using LlamaIndex
+        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
+            query=query,
+            use_cache=use_cache,
+            similarity_threshold=similarity_threshold,
+            top_k=top_k
+        )
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/search/stats', methods=['GET'])
+def get_search_stats():
+    """Get search system statistics"""
+    try:
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'Hybrid search system not available'
+            })
+        
+        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/llamaindex/query', methods=['POST'])
+def pure_llamaindex_query():
+    """Pure LlamaIndex query - fast RAG with your knowledge base"""
+    try:
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Query is required'
+            }), 400
+        
+        query = data['query']
+        use_cache = data.get('use_cache', True)
+        similarity_threshold = data.get('similarity_threshold', 0.5)  # Lower threshold for more results
+        top_k = data.get('top_k', 8)  # More results for better coverage
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex system not available'
+            }), 503
+        
+        # Check and update LlamaIndex availability
+        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex not available. Please train the knowledge base first.'
+            }), 503
+        
+        # Query using pure LlamaIndex
+        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
+            query=query,
+            use_cache=use_cache,
+            similarity_threshold=similarity_threshold,
+            top_k=top_k
+        )
+        
+        if not result['success']:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Query failed')
+            }), 500
+        
+        # Format the response for better readability
+        response = {
+            'success': True,
+            'query': query,
+            'answer': result['response'],
+            'sources': [],
+            'query_time': result['query_time'],
+            'total_sources_found': result['total_sources'],
+            'sources_used': result['filtered_sources']
+        }
+        
+        # Format sources with file information
+        for source in result['sources']:
+            formatted_source = {
+                'content': source['content'][:300] + '...' if len(source['content']) > 300 else source['content'],
+                'filename': source['filename'],
+                'relevance_score': round(source['score'], 3),
+                'file_path': source['filename']
+            }
+            response['sources'].append(formatted_source)
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/llamaindex/fast-query', methods=['POST'])
+def fast_llamaindex_query():
+    """Fast LlamaIndex query - returns retrieved documents without LLM response generation"""
+    try:
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Query is required'
+            }), 400
+        
+        query = data['query']
+        top_k = data.get('top_k', 8)
+        similarity_threshold = data.get('similarity_threshold', 0.0)
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex system not available'
+            }), 503
+        
+        # Check and update LlamaIndex availability
+        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex not available. Please train the knowledge base first.'
+            }), 503
+        
+        start_time = time.time()
+        
+        # Get similar documents directly
+        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
+            query=query,
+            top_k=top_k,
+            similarity_threshold=similarity_threshold
+        )
+        
+        query_time = time.time() - start_time
+        
+        # Format the response
+        response = {
+            'success': True,
+            'query': query,
+            'query_time': query_time,
+            'documents_found': len(similar_docs),
+            'answer': f"Found {len(similar_docs)} relevant documents from your knowledge base.",
+            'sources': []
+        }
+        
+        # Format sources with file information
+        for doc in similar_docs:
+            formatted_source = {
+                'content': doc['content'][:500] + '...' if len(doc['content']) > 500 else doc['content'],
+                'filename': doc['filename'],
+                'relevance_score': round(doc['score'], 6),
+                'file_path': doc['filename'],
+                'full_content': doc['content']  # Include full content for reference
+            }
+            response['sources'].append(formatted_source)
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/llamaindex/train', methods=['POST'])
+def train_llamaindex():
+    """Train/rebuild LlamaIndex on your knowledge base"""
+    try:
+        data = request.get_json() or {}
+        force_rebuild = data.get('force_rebuild', True)
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex system not available'
+            }), 503
+        
+        # Rebuild the index
+        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'LlamaIndex trained successfully!',
+                'stats': {
+                    'documents_processed': result['documents_processed'],
+                    'chunks_created': result['chunks_created'],
+                    'training_time': round(result['indexing_time'], 2),
+                    'index_size_mb': result.get('index_size_mb', 0)
+                }
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Training failed')
+            }), 500
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/llamaindex/debug', methods=['POST'])
+def debug_llamaindex():
+    """Debug endpoint to test document retrieval without LLM response"""
+    try:
+        data = request.get_json()
+        if not data or 'query' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Query is required'
+            }), 400
+        
+        query = data['query']
+        top_k = data.get('top_k', 10)
+        similarity_threshold = data.get('similarity_threshold', 0.0)
+        
+        if not HYBRID_SEARCH_SYSTEM:
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex system not available'
+            }), 503
+        
+        # Check and update LlamaIndex availability
+        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
+            return jsonify({
+                'success': False,
+                'error': 'LlamaIndex not available. Please train the knowledge base first.'
+            }), 503
+        
+        # Get similar documents directly
+        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
+            query=query,
+            top_k=top_k,
+            similarity_threshold=similarity_threshold
+        )
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'documents_found': len(similar_docs),
+            'documents': similar_docs
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 if __name__ == "__main__":

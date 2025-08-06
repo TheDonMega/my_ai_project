@@ -7,6 +7,19 @@ yarn-error.log*
 # Knowledge base (excluded from version control)
 knowledge_base/
 
+# Vector store data files (excluded from version control)
+vector_store/**/*.bin
+vector_store/**/*.sqlite3
+vector_store/**/*.json
+vector_store/**/*.index
+vector_store/**/*.faiss
+vector_store/**/*.pkl
+vector_store/**/*.pickle
+vector_store/**/*.h5
+vector_store/**/*.hdf5
+vector_store/**/*.npy
+vector_store/**/*.npz
+
 # Python
 __pycache__/
 *.py[cod]

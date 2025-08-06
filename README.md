@@ -5,6 +5,8 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
 ## Features
 
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
+- **Advanced RAG System**: LlamaIndex integration with vector search and semantic similarity
+- **Hybrid Search**: Combines vector search with traditional keyword search for optimal results
 - **AI-Powered Analysis**: Uses CrewAI for multi-agent analysis of local content
 - **Local AI Processing**: Uses Ollama for local AI model inference
 - **Dynamic Personality System**: Customizable AI behavior through markdown files
@@ -14,6 +16,49 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
 - **Folder Structure Support**: Displays folder paths for better organization
 - **Modal Document Viewer**: View full documents with proper overlay
 - **Multi-Step AI Flow**: Guided process for AI analysis with file selection
+
+## 🚀 LlamaIndex Integration
+
+This project now includes **advanced RAG capabilities** with LlamaIndex integration:
+
+### **Vector Search & Semantic Similarity**
+- **Semantic Search**: Find content based on meaning, not just keywords
+- **Hybrid Search**: Combines vector search with traditional keyword search
+- **ChromaDB Storage**: Persistent vector embeddings with metadata
+- **FAISS Support**: High-performance vector similarity search
+
+### **Smart Document Processing**
+- **Intelligent Chunking**: Splits documents based on semantic boundaries
+- **Automatic Indexing**: Builds and maintains vector indexes automatically
+- **Metadata Preservation**: Maintains document structure and relationships
+
+### **Performance Features**
+- **Response Caching**: Caches query results for faster responses
+- **Model Preloading**: Keeps models loaded for optimal performance
+- **Batch Processing**: Efficient handling of large document collections
+
+### **API Endpoints**
+```bash
+# Check LlamaIndex status
+curl http://localhost:5557/llamaindex/status
+
+# Perform hybrid search
+curl -X POST http://localhost:5557/search/hybrid \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the deployment process?", "search_mode": "hybrid"}'
+
+# Query with full RAG pipeline
+curl -X POST http://localhost:5557/search/llamaindex \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Explain the architecture in detail"}'
+
+# Rebuild vector index
+curl -X POST http://localhost:5557/llamaindex/rebuild \
+  -H "Content-Type: application/json" \
+  -d '{"force_rebuild": true}'
+```
+
+📖 **For detailed LlamaIndex documentation, see [LLAMAINDEX_INTEGRATION.md](LLAMAINDEX_INTEGRATION.md)**
 
 ## 🎭 Personality System
 

@@ -19,6 +19,13 @@ RUN pip install --upgrade pip && \
      pip install --no-cache-dir python-dotenv flask flask-cors && \
      pip install --no-cache-dir crewai langchain langchain-community langchain-core && \
      pip install --no-cache-dir chromadb sentence-transformers ollama && \
+     pip install --no-cache-dir llama-index==0.9.48 && \
+     pip install --no-cache-dir llama-index-embeddings-ollama==0.1.3 && \
+     pip install --no-cache-dir llama-index-llms-ollama==0.1.3 && \
+     pip install --no-cache-dir llama-index-vector-stores-chroma==0.1.3 && \
+     pip install --no-cache-dir llama-index-vector-stores-faiss==0.2.1 && \
+     pip install --no-cache-dir faiss-cpu==1.7.4 && \
+     pip install --no-cache-dir sentence-transformers==2.2.2 && \
      pip install --no-cache-dir pydantic typing-extensions)
 
 # Copy application files
@@ -28,6 +35,8 @@ COPY backend/startup_ollama.py .
 COPY backend/train_knowledge_base.py .
 COPY backend/feedback_system.py .
 COPY backend/ollama_trainer.py .
+COPY backend/llamaindex_manager.py .
+COPY backend/hybrid_search.py .
 
 # Create knowledge base directory (will be mounted as volume)
 RUN mkdir -p /app/knowledge_base

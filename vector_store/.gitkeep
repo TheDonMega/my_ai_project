@@ -1,0 +1,2 @@
+# This file ensures the vector_store directory is tracked by git
+# while allowing the actual index files to be ignored
