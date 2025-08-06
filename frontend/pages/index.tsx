@@ -3,10 +3,12 @@ import axios from 'axios';
 import type { Answer, Source, FullDocument } from '../types.ts';
 import DocumentModal from '../components/DocumentModal';
 import FormattedAnswer from '../components/FormattedAnswer';
+import FeedbackButton from '../components/FeedbackButton';
 import styles from '../styles/Home.module.css';
 import answerStyles from '../styles/Answer.module.css';
 import stepStyles from '../styles/StepFlow.module.css';
 import { GlobalStyle } from '../styles/GlobalStyle';
+import TrainingDashboard from '../components/TrainingDashboard';
 
 interface StepState {
   step: string;
@@ -31,6 +33,16 @@ export default function Home() {
   const [showSections, setShowSections] = useState(true);
   const [viewingFullSource, setViewingFullSource] = useState(false);
   const [currentStep, setCurrentStep] = useState<StepState | null>(null);
+  const [isTraining, setIsTraining] = useState(false);
+  const [trainingProgress, setTrainingProgress] = useState<string>('');
+  const [lastTrainingTime, setLastTrainingTime] = useState<string | null>(null);
+  const [showTrainingDashboard, setShowTrainingDashboard] = useState(false);
+  const [feedbackNotification, setFeedbackNotification] = useState<{
+    show: boolean;
+    message: string;
+    type: 'success' | 'info' | 'warning';
+    insights?: string[];
+  } | null>(null);
 
   // Check server status and get document count on load
   useEffect(() => {
@@ -50,53 +62,12 @@ export default function Home() {
     // This will be replaced by separate handlers
   };
 
-  const handleLocalSearch = async () => {
-    if (!question.trim()) return;
-    
-    setLoading(true);
-    setAnswer(null);
-    setProcessingStep('Searching knowledge base...');
-    
-    try {
-      const response = await axios.post('http://localhost:5557/ask', { 
-        question,
-        step: 'initial',
-        method: 'local_search'
-      });
-      
-      if (response.data.steps) {
-        for (const step of response.data.steps) {
-          setProcessingStep(step);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      setAnswer(response.data);
-      if (response.data.next_step) {
-        setCurrentStep({
-          step: response.data.next_step,
-          prompt: response.data.prompt,
-          current_message: question
-        });
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      setAnswer({
-        answer: 'Error occurred while fetching the answer.',
-        sources: []
-      });
-    }
-    
-    setProcessingStep('');
-    setLoading(false);
-  };
-
   const handleAIAnalysis = async () => {
     if (!question.trim()) return;
     
     setLoading(true);
     setAnswer(null);
-    setProcessingStep('Analyzing with AI...');
+    setProcessingStep('Starting AI analysis...');
     
     try {
       const response = await axios.post('http://localhost:5557/ask', { 
@@ -124,6 +95,31 @@ export default function Home() {
       console.error('Error:', error);
       setAnswer({
         answer: 'Error occurred while fetching the answer.',
+        sources: []
+      });
+    } finally {
+      setLoading(false);
+      setProcessingStep('');
+    }
+  };
+
+  const handleOllamaAnalysis = async () => {
+    if (!question.trim()) return;
+    
+    setLoading(true);
+    setAnswer(null);
+    setProcessingStep('Analyzing with Ollama...');
+    
+    try {
+      const response = await axios.post('http://localhost:5557/ask-ollama', { 
+        question
+      });
+      
+      setAnswer(response.data);
+    } catch (error) {
+      console.error('Error:', error);
+      setAnswer({
+        answer: 'Error occurred while fetching the answer from Ollama.',
         sources: []
       });
     }
@@ -234,13 +230,180 @@ export default function Home() {
     });
   };
 
+  const handleTraining = async () => {
+    setIsTraining(true);
+    setTrainingProgress('Starting knowledge base training...');
+    
+    try {
+      // Call the training endpoint
+      const response = await axios.post('http://localhost:5557/train', {
+        action: 'train_knowledge_base'
+      });
+      
+      if (response.data.success) {
+        setTrainingProgress('Training completed successfully!');
+        setLastTrainingTime(new Date().toLocaleString());
+        
+        // Update document count if provided
+        if (response.data.documents_processed) {
+          setDocumentsLoaded(response.data.documents_processed);
+        }
+        
+        // Show success message for a few seconds
+        setTimeout(() => {
+          setTrainingProgress('');
+        }, 3000);
+      } else {
+        setTrainingProgress('Training failed: ' + (response.data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Training error:', error);
+      setTrainingProgress('Training failed: ' + (error as any).message);
+    } finally {
+      setTimeout(() => {
+        setIsTraining(false);
+        setTrainingProgress('');
+      }, 2000);
+    }
+  };
+
+  const handleOllamaTraining = async () => {
+    setIsTraining(true);
+    setTrainingProgress('Starting Ollama model training...');
+    
+    try {
+      // Call the Ollama training endpoint
+      const response = await axios.post('http://localhost:5557/train-ollama', {
+        action: 'train_ollama'
+      });
+      
+      if (response.data.success) {
+        setTrainingProgress(`Ollama training completed! Created ${response.data.training_examples} training examples.`);
+        setLastTrainingTime(new Date().toLocaleString());
+        
+        // Show success message for a few seconds
+        setTimeout(() => {
+          setTrainingProgress('');
+        }, 5000);
+      } else {
+        setTrainingProgress('Ollama training failed: ' + (response.data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Ollama training error:', error);
+      setTrainingProgress('Ollama training failed: ' + (error as any).message);
+    } finally {
+      setTimeout(() => {
+        setIsTraining(false);
+        setTrainingProgress('');
+      }, 3000);
+    }
+  };
+
   return (
     <div className={styles.container}>
       <h1>AI Knowledge Base Assistant</h1>
       
+      {/* Feedback Notification */}
+      {feedbackNotification && feedbackNotification.show && (
+        <div className={`mb-4 p-4 rounded-lg border ${
+          feedbackNotification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+          feedbackNotification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
+          'bg-blue-50 border-blue-200 text-blue-800'
+        }`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h3 className="font-medium mb-2">{feedbackNotification.message}</h3>
+              {feedbackNotification.insights && feedbackNotification.insights.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm font-medium mb-2">How the system will learn:</p>
+                  <ul className="space-y-1">
+                    {feedbackNotification.insights.map((insight, index) => (
+                      <li key={index} className="text-sm flex items-start">
+                        <span className="mr-2">•</span>
+                        {insight}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setFeedbackNotification(null)}
+              className="ml-4 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div className={styles.navigation}>
+        <a href="/feedback" className={styles.navLink}>
+          📊 View Feedback Analytics
+        </a>
+      </div>
+      
       {documentsLoaded !== null && (
         <div className={styles.status}>
           <p>Knowledge base loaded with {documentsLoaded} documents</p>
+          {lastTrainingTime && (
+            <p className={styles.lastTraining}>Last trained: {lastTrainingTime}</p>
+          )}
+        </div>
+      )}
+
+      {/* Training Section */}
+      <div className={styles.trainingSection}>
+        <div className={styles.trainingHeader}>
+          <h3>Knowledge Base Training</h3>
+          <div className={styles.trainingButtons}>
+            <button 
+              onClick={handleTraining}
+              disabled={isTraining}
+              className={styles.trainingButton}
+            >
+              {isTraining ? 'Training...' : '🔄 Train Knowledge Base'}
+            </button>
+            <button 
+              onClick={handleOllamaTraining}
+              disabled={isTraining}
+              className={styles.trainingButton}
+            >
+              {isTraining ? 'Training...' : '🔄 Train Ollama Model'}
+            </button>
+            <button 
+              onClick={() => setShowTrainingDashboard(!showTrainingDashboard)}
+              className={styles.dashboardButton}
+            >
+              📊 Training Dashboard
+            </button>
+          </div>
+        </div>
+        
+        {isTraining && (
+          <div className={styles.trainingProgress}>
+            <div className={styles.progressBar}>
+              <div className={styles.progressFill}></div>
+            </div>
+            <p>{trainingProgress}</p>
+          </div>
+        )}
+        
+        <div className={styles.trainingInfo}>
+          <p>Training helps the AI understand your knowledge base better and improves search accuracy.</p>
+          <ul>
+            <li>📊 Indexes all documents for faster search</li>
+            <li>🎯 Improves relevance scoring</li>
+            <li>🧠 Creates semantic embeddings for better understanding</li>
+            <li>📈 Tracks changes and updates automatically</li>
+          </ul>
+        </div>
+      </div>
+      
+      {/* Training Dashboard */}
+      {showTrainingDashboard && (
+        <div className={styles.dashboardContainer}>
+          <TrainingDashboard />
         </div>
       )}
       
@@ -254,19 +417,19 @@ export default function Home() {
         <div className={styles.buttonContainer}>
           <button 
             type="button" 
-            className={styles.localSearchButton} 
-            onClick={handleLocalSearch}
-            disabled={loading || !question.trim()}
-          >
-            {loading ? 'Processing...' : 'Search Locally'}
-          </button>
-          <button 
-            type="button" 
             className={styles.aiAnalysisButton} 
             onClick={handleAIAnalysis}
             disabled={loading || !question.trim()}
           >
             {loading ? 'Processing...' : 'Use AI Locally'}
+          </button>
+          <button 
+            type="button" 
+            className={styles.ollamaAnalysisButton} 
+            onClick={handleOllamaAnalysis}
+            disabled={loading || !question.trim()}
+          >
+            {loading ? 'Processing...' : 'Use Ollama Locally'}
           </button>
         </div>
       </form>
@@ -414,6 +577,27 @@ export default function Home() {
       {answer && (
         <div className={answerStyles.answer}>
           <h2>Answer:</h2>
+          
+          {/* AI Status Indicator */}
+          {answer.ai_used !== undefined && (
+            <div className={`${answerStyles.aiStatus} ${answer.ai_used ? answerStyles.aiSuccess : answerStyles.aiFallback}`}>
+              {answer.ai_used ? (
+                <div>
+                  <span>🤖 AI Generated Response</span>
+                  <span className={answerStyles.method}>Method: {answer.method}</span>
+                </div>
+              ) : (
+                <div>
+                  <span>⚠️ Local Search Fallback</span>
+                  <span className={answerStyles.method}>Method: {answer.method}</span>
+                  {answer.fallback_reason && (
+                    <span className={answerStyles.fallbackReason}>Reason: {answer.fallback_reason}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
           <FormattedAnswer answer={answer.answer} />
           
           {answer.sources && answer.sources.length > 0 && (
@@ -472,6 +656,31 @@ export default function Home() {
               <p>{answer.notice}</p>
             </div>
           )}
+
+          {/* Feedback Button */}
+          <FeedbackButton
+            userQuestion={question}
+            aiResponse={answer.answer}
+            searchMethod={answer.method || 'unknown'}
+            sourcesUsed={answer.sources ? answer.sources.map(s => s.filename) : []}
+            relevanceScore={answer.sources && answer.sources.length > 0 
+              ? answer.sources.reduce((sum, s) => sum + (s.relevance || 0), 0) / answer.sources.length / 100
+              : 0
+            }
+            onFeedbackSubmitted={(insights) => {
+              setFeedbackNotification({
+                show: true,
+                message: '🎉 Feedback submitted! The system will learn from your input.',
+                type: 'success',
+                insights: insights
+              });
+              
+              // Auto-hide after 8 seconds
+              setTimeout(() => {
+                setFeedbackNotification(null);
+              }, 8000);
+            }}
+          />
         </div>
       )}
       

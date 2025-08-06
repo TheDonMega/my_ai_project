@@ -1,12 +1,12 @@
 # AI Knowledge Base Analyzer
 
-An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers with web search capabilities.
+An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers using local Ollama models.
 
 ## Features
 
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
 - **AI-Powered Analysis**: Uses CrewAI for multi-agent analysis of local content
-- **Web Search Integration**: Gemini AI with built-in web search capabilities
+- **Local AI Processing**: Uses Ollama for local AI model inference
 - **Folder Structure Support**: Displays folder paths for better organization
 - **Modal Document Viewer**: View full documents with proper overlay
 - **Multi-Step AI Flow**: Guided process for AI analysis with file selection
@@ -94,7 +94,7 @@ To change models, edit `crewai_analyzer.py` and update the `model_name` variable
 3. **Set up environment variables:**
    ```bash
    cp .env.example .env
-   # Edit .env with your GEMINI_API_KEY
+   # Edit .env with your configuration
    ```
 
 4. **Start the backend:**
@@ -145,15 +145,15 @@ The application uses CrewAI for sophisticated local knowledge base analysis:
 - **Content Analyst**: Synthesizes and structures answers
 - **Quality Assurance**: Validates accuracy and completeness
 
-### 🔒 API Key Security
+### 🔒 Local AI Processing
 
-**Important**: Your Gemini API key is **NEVER** used during CrewAI operations:
+**Important**: The system uses only local Ollama models for AI processing:
 
-- **CrewAI**: Uses only local Ollama models (no API calls)
-- **Web Search**: Gemini API key is only used for web search functionality
-- **Complete Separation**: CrewAI and web search are completely independent
+- **CrewAI**: Uses only local Ollama models (no external API calls)
+- **Complete Privacy**: All AI processing happens locally
+- **No External Dependencies**: No API keys or external services required
 
-This ensures your API key is only used when you explicitly choose web search, not during local knowledge base analysis.
+This ensures complete privacy and independence from external AI services.
 
 ### Fallback Options
 
@@ -162,12 +162,12 @@ If CrewAI is unavailable, the system gracefully falls back to:
 2. Basic document matching
 3. Manual file selection for AI analysis
 
-### Web Search Integration
+### Local AI Processing
 
-When local knowledge is insufficient, Gemini can:
-- Search the web for additional information
-- Provide citations and sources
-- Combine local and web knowledge
+The system uses Ollama for all AI operations:
+- Local model inference
+- No external API calls
+- Complete privacy and control
 
 ## API Endpoints
 
@@ -187,7 +187,7 @@ When local knowledge is insufficient, Gemini can:
 
 1. **Python version conflicts**: The Docker setup uses Python 3.11 for compatibility
 2. **CrewAI installation**: The system includes fallback options if CrewAI fails
-3. **Ollama setup**: Optional - Gemini is used as fallback
+3. **Ollama setup**: Required for AI functionality
 
 ### Common Solutions
 

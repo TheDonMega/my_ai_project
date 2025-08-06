@@ -38,12 +38,8 @@ echo "🚀 Starting services..."
 docker-compose up -d
 
 echo ""
-echo "⏳ Waiting for Ollama service to start..."
+echo "⏳ Waiting for services to start..."
 sleep 10
-
-echo ""
-echo "📥 Setting up Ollama models..."
-python setup_docker_ollama.py
 
 echo ""
 echo "🎉 Setup completed!"

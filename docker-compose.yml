@@ -10,26 +10,28 @@ services:
       - ollama_ai_project_data:/root/.ollama
     environment:
       - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_KEEP_ALIVE=5m
     restart: unless-stopped
+    # Performance optimizations
+    shm_size: '2gb'  # Increase shared memory for better performance
     deploy:
       resources:
         limits:
-          memory: 8G
-          cpus: '4.0'
+          memory: 12G
+          cpus: '6.0'
         reservations:
-          memory: 4G
-          cpus: '2.0'
+          memory: 6G
+          cpus: '3.0'
 
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: backend/Dockerfile.backend
     ports:
       - "5557:5557"
     volumes:
       - ./knowledge_base:/app/knowledge_base
-    env_file:
-      - .env
     environment:
       - PIP_NO_CACHE_DIR=1
       - PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -40,15 +42,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
-          cpus: '2.0'
+          memory: 6G
+          cpus: '3.0'
         reservations:
-          memory: 2G
-          cpus: '1.0'
+          memory: 3G
+          cpus: '1.5'
 
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile.frontend
     ports:
       - "5556:5556"

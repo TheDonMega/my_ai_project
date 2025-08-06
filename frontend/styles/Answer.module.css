@@ -214,5 +214,43 @@
 }
 
 .followUpButtons button:hover {
-  background-color: #2563eb;
+  background-color: #1e40af;
+  transform: translateY(-1px);
+}
+
+/* AI Status Indicator Styles */
+.aiStatus {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.aiSuccess {
+  background-color: #dcfce7;
+  border: 1px solid #16a34a;
+  color: #166534;
+}
+
+.aiFallback {
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+}
+
+.aiStatus .method {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  font-weight: normal;
+}
+
+.aiStatus .fallbackReason {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  font-weight: normal;
+  font-style: italic;
 }

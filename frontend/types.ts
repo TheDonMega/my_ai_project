@@ -12,6 +12,10 @@ export interface Answer {
   sources?: Source[];
   notice?: string;
   steps?: string[];
+  method?: string;
+  ai_used?: boolean;
+  fallback_used?: boolean;
+  fallback_reason?: string;
 }
 
 export interface FullDocument {
