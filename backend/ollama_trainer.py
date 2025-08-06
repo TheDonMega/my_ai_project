@@ -468,7 +468,7 @@ TRAIN {training_file}
         return hashlib.md5(content.encode()).hexdigest()
     
     def query_ollama(self, question: str, context: str = "") -> Optional[str]:
-        """Query the trained Ollama model with performance optimizations"""
+        """Query the trained Ollama model with performance optimizations and personality prompt"""
         if not self.check_ollama_status():
             return None
         
@@ -500,7 +500,16 @@ TRAIN {training_file}
             if len(context) > max_context_length:
                 context = context[:max_context_length] + "... [truncated for performance]"
             
-            prompt = f"""Context from knowledge base:
+            # Get personality prompt from server
+            try:
+                from server import get_personality_prompt
+                personality_prompt = get_personality_prompt()
+            except ImportError:
+                personality_prompt = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
+            
+            prompt = f"""{personality_prompt}
+
+Context from knowledge base:
 {context}
 
 User question: {question}

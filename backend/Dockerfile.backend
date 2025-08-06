@@ -28,9 +28,11 @@ COPY backend/startup_ollama.py .
 COPY backend/train_knowledge_base.py .
 COPY backend/feedback_system.py .
 COPY backend/ollama_trainer.py .
-COPY knowledge_base ./knowledge_base
 
-# Create chroma_db directory
+# Create knowledge base directory (will be mounted as volume)
+RUN mkdir -p /app/knowledge_base
+
+# Create chroma database directory
 RUN mkdir -p chroma_db
 
 # Create startup script

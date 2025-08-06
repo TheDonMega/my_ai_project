@@ -31,7 +31,7 @@ services:
     ports:
       - "5557:5557"
     volumes:
-      - ./knowledge_base:/app/knowledge_base
+      - ${PWD:-.}/knowledge_base:/app/knowledge_base
     environment:
       - PIP_NO_CACHE_DIR=1
       - PIP_DISABLE_PIP_VERSION_CHECK=1

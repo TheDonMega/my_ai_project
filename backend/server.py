@@ -34,6 +34,29 @@ except ImportError as e:
 OLLAMA_AVAILABLE = False
 OLLAMA_TRAINER = None
 MODEL_PRELOADED = False
+PERSONALITY_PROMPT = ""
+
+def load_personality_prompt():
+    """Load personality/behavior prompt from behavior.md file"""
+    global PERSONALITY_PROMPT
+    
+    try:
+        behavior_file = "/app/knowledge_base/behavior.md"
+        if os.path.exists(behavior_file):
+            with open(behavior_file, 'r', encoding='utf-8') as f:
+                PERSONALITY_PROMPT = f.read().strip()
+                print(f"✅ Loaded personality prompt from behavior.md ({len(PERSONALITY_PROMPT)} characters)")
+        else:
+            print("⚠️ No behavior.md file found. Using default personality.")
+            PERSONALITY_PROMPT = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
+    except Exception as e:
+        print(f"❌ Error loading personality prompt: {e}")
+        PERSONALITY_PROMPT = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
+
+def get_personality_prompt():
+    """Get the current personality prompt"""
+    global PERSONALITY_PROMPT
+    return PERSONALITY_PROMPT
 
 def preload_ollama_model():
     """Preload the best available Ollama model for faster responses"""
@@ -71,6 +94,9 @@ try:
         print("⚠️ Ollama trainer not available: Ollama is not running or accessible")
 except ImportError as e:
     print(f"⚠️ Ollama trainer not available: {e}")
+
+# Load personality prompt on startup
+load_personality_prompt()
 
 # --- Setup ---
 # Load environment variables from .env file
@@ -1064,6 +1090,32 @@ def get_performance_stats():
     }
     
     return jsonify(stats)
+
+@app.route('/personality', methods=['GET'])
+def get_personality():
+    """Get current personality prompt"""
+    return jsonify({
+        'personality_prompt': get_personality_prompt(),
+        'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md'),
+        'behavior_file_path': '/app/knowledge_base/behavior.md'
+    })
+
+@app.route('/personality/reload', methods=['POST'])
+def reload_personality():
+    """Reload personality prompt from behavior.md file"""
+    try:
+        load_personality_prompt()
+        return jsonify({
+            'success': True,
+            'message': 'Personality prompt reloaded successfully',
+            'personality_prompt': get_personality_prompt(),
+            'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md')
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to reload personality: {str(e)}'
+        }), 500
 
 if __name__ == "__main__":
     print(f"Starting server... Knowledge base loaded with {len(kb)} documents.")
