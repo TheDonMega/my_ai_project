@@ -1,201 +1,364 @@
 # AI Knowledge Base Analyzer
 
-An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers using local Ollama models.
+An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers using local Ollama models. Features a dynamic personality system for customizable AI behavior and real-time knowledge base management.
 
 ## Features
 
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
 - **AI-Powered Analysis**: Uses CrewAI for multi-agent analysis of local content
 - **Local AI Processing**: Uses Ollama for local AI model inference
+- **Dynamic Personality System**: Customizable AI behavior through markdown files
+- **Real-time Knowledge Base Management**: Add documents without restarting containers
+- **Feedback System**: Rate responses and improve AI performance over time
+- **Model Training**: Train custom Ollama models on your knowledge base
 - **Folder Structure Support**: Displays folder paths for better organization
 - **Modal Document Viewer**: View full documents with proper overlay
 - **Multi-Step AI Flow**: Guided process for AI analysis with file selection
 
-## Docker Setup
+## 🎭 Personality System
 
-This application is containerized for easy deployment and consistent environments. The setup includes Ollama for local AI processing.
+The AI assistant's personality and behavior can be customized using a `behavior.md` file in your knowledge base. This allows you to:
 
-### Quick Start
+- **Change AI personality instantly** without retraining models
+- **Test different communication styles** (professional, casual, academic, creative)
+- **Customize response formats** and tone
+- **Apply domain-specific behaviors** (medical, technical, educational)
 
-1. **Build and start all services:**
+### Quick Personality Setup
+
+1. **Create a personality file:**
    ```bash
-   chmod +x build_docker.sh
-   ./build_docker.sh
+   nano ./knowledge_base/behavior.md
    ```
 
-2. **Access the application:**
-   - Frontend: http://localhost:5556
-   - Backend: http://localhost:5557
-   - Ollama: http://localhost:11434
+2. **Example personality (Developer Mode):**
+   ```markdown
+   # AI Assistant Personality - Developer Mode
+   
+   You are a friendly, tech-savvy AI assistant with a developer-focused personality:
+   
+   ## Core Personality
+   - **Casual and approachable**: Use a relaxed, conversational tone
+   - **Tech-enthusiastic**: Show excitement about technical topics
+   - **Pragmatic**: Focus on practical solutions
+   
+   ## Communication Style
+   - **Use developer slang**: Feel free to use terms like "cool", "awesome"
+   - **Include code examples**: When relevant, provide code snippets
+   - **Be direct**: Get to the point quickly
+   ```
 
-### Manual Setup
+3. **Reload the personality:**
+   ```bash
+   curl -X POST http://localhost:5557/personality/reload
+   ```
 
-If you prefer to build manually:
+### Personality Management Commands
 
 ```bash
-# Build all containers
-docker-compose build
+# Check current personality
+curl -s http://localhost:5557/personality
 
-# Start services
-docker-compose up -d
+# Reload personality changes
+curl -X POST http://localhost:5557/personality/reload
 
-# Wait for Ollama to start, then pull models
-python setup_docker_ollama.py
+# Use the convenience script (reloads both personality and knowledge base)
+./update_personality.sh
 ```
 
-### Docker Architecture
+## 📚 Knowledge Base Management
 
-The setup includes three services:
+### Adding New Documents
 
-- **Ollama**: Local AI model server (llama2, mistral, etc.)
-- **Backend**: Python Flask server with CrewAI integration
-- **Frontend**: Next.js React application
+**No scripts or container restarts needed!** Simply add files to `./knowledge_base/` and reload:
 
-### Ollama Models
+```bash
+# Add your .md files to ./knowledge_base/
+# Then reload the knowledge base:
+curl -X POST http://localhost:5557/knowledge-base/reload
 
-The system uses Ollama for local AI processing:
+# Check current document count:
+curl -s http://localhost:5557/status
 
-- **llama2** (default): Good general-purpose model
-- **mistral**: Faster, smaller alternative
-- **codellama**: Specialized for code analysis
-
-To change models, edit `crewai_analyzer.py` and update the `model_name` variable.
-
-### Docker Features
-
-- **Python 3.11**: Compatible with latest CrewAI versions
-- **Ollama Integration**: Local AI models for privacy and speed
-- **Flexible Dependencies**: Automatic fallback installation if bulk install fails
-- **Graceful Degradation**: Falls back to simple search if CrewAI unavailable
-- **Volume Mounting**: Knowledge base mounted as volume for easy updates
-- **Persistent Models**: Ollama models stored in Docker volume
-
-## Local Development Setup
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 16+
-- Ollama (optional, for local AI models)
-
-### Backend Setup
-
-1. **Create virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set up environment variables:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Start the backend:**
-   ```bash
-   python server.py
-   ```
-
-### Frontend Setup
-
-1. **Install dependencies:**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. **Start the frontend:**
-   ```bash
-   npm run dev
-   ```
-
-## Knowledge Base Structure
-
-Place your markdown files in the `knowledge_base` folder:
-
-```
-knowledge_base/
-├── general/
-│   ├── overview.md
-│   └── guidelines.md
-├── technical/
-│   ├── api-docs.md
-│   └── setup.md
-└── root-file.md
+# Or use the convenience script:
+./update_personality.sh
 ```
 
-The system will:
-- Recursively search all subfolders
-- Display folder paths in search results
-- Support nested organization
+### Knowledge Base Commands
 
-## AI Integration
+```bash
+# Check current document count
+curl -s http://localhost:5557/status
 
-### CrewAI Multi-Agent System
+# Reload knowledge base (detects new files)
+curl -X POST http://localhost:5557/knowledge-base/reload
 
-The application uses CrewAI for sophisticated local knowledge base analysis:
+# Get detailed knowledge base stats
+curl -s http://localhost:5557/training/stats
+```
 
-- **Research Agent**: Finds relevant information
-- **Content Analyst**: Synthesizes and structures answers
-- **Quality Assurance**: Validates accuracy and completeness
+### Real-time File Detection
 
-### 🔒 Local AI Processing
+- **Bind mount setup**: Your local `./knowledge_base/` folder is directly mounted to the container
+- **Instant availability**: New files are immediately accessible
+- **No volume management**: No need for scripts to copy files
+- **Version control friendly**: Files stay in your local git repository
 
-**Important**: The system uses only local Ollama models for AI processing:
+## 🎯 AI Training & Feedback
 
-- **CrewAI**: Uses only local Ollama models (no external API calls)
-- **Complete Privacy**: All AI processing happens locally
-- **No External Dependencies**: No API keys or external services required
+### Training Custom Models
 
-This ensures complete privacy and independence from external AI services.
+Train Ollama models on your knowledge base and feedback data:
 
-### Fallback Options
+```bash
+# Train the Ollama model on your knowledge base
+curl -X POST http://localhost:5557/train-ollama \
+  -H "Content-Type: application/json" \
+  -d '{"action": "train_ollama"}'
 
-If CrewAI is unavailable, the system gracefully falls back to:
-1. Simple keyword search
-2. Basic document matching
-3. Manual file selection for AI analysis
+# Train the knowledge base (for search improvements)
+curl -X POST http://localhost:5557/train \
+  -H "Content-Type: application/json" \
+  -d '{"action": "train_knowledge_base"}'
+```
 
-### Local AI Processing
+### Feedback System
 
-The system uses Ollama for all AI operations:
-- Local model inference
-- No external API calls
-- Complete privacy and control
+Rate AI responses to improve performance:
 
-## API Endpoints
+```bash
+# Submit feedback for an AI response
+curl -X POST http://localhost:5557/feedback \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_question": "Your question here",
+    "ai_response": "The AI response",
+    "rating": 5,
+    "feedback_type": "thumbs_up",
+    "feedback_text": "Great response!"
+  }'
+```
 
-- `POST /ask` - Main query endpoint
-- `GET /document/<filename>` - Get full document content
-- `GET /status` - Service status
+### Performance Monitoring
 
-## Troubleshooting
+```bash
+# Check AI performance stats
+curl -s http://localhost:5557/performance
 
-### Docker Issues
+# Get feedback insights
+curl -s http://localhost:5557/feedback/insights
 
-1. **Build failures**: Try `docker-compose build --no-cache`
-2. **Permission issues**: Ensure Docker has access to the project directory
-3. **Port conflicts**: Change ports in `docker-compose.yml`
+# View training history
+curl -s http://localhost:5557/training/history
+```
 
-### Dependency Issues
+## 🚀 Quick Start
 
-1. **Python version conflicts**: The Docker setup uses Python 3.11 for compatibility
-2. **CrewAI installation**: The system includes fallback options if CrewAI fails
-3. **Ollama setup**: Required for AI functionality
+### 1. Build and Start
 
-### Common Solutions
+```bash
+# Build and start all services
+chmod +x build_docker.sh
+./build_docker.sh
 
-- **Clear Docker cache**: `docker system prune -a`
-- **Rebuild containers**: `docker-compose down && docker-compose build --no-cache`
-- **Check logs**: `docker-compose logs -f backend`
+# Or manually:
+docker-compose down && docker-compose up -d --build
+```
 
-## Contributing
+### 2. Add Your Knowledge Base
+
+```bash
+# Add your .md files to ./knowledge_base/
+# The system will automatically detect them
+```
+
+### 3. Customize Personality (Optional)
+
+```bash
+# Edit the personality file
+nano ./knowledge_base/behavior.md
+
+# Reload personality
+./update_personality.sh
+```
+
+### 4. Access the Application
+
+- **Frontend**: http://localhost:5556
+- **Backend**: http://localhost:5557
+- **Ollama**: http://localhost:11434
+
+## 📁 Project Structure
+
+```
+my_ai_project/
+├── knowledge_base/           # Your markdown files (bind mounted)
+│   ├── behavior.md          # AI personality configuration
+│   ├── README.md
+│   └── your-documents.md
+├── backend/                 # Python Flask server
+│   ├── server.py           # Main server with personality system
+│   ├── ollama_trainer.py   # Model training and management
+│   └── feedback_system.py  # Feedback collection and analysis
+├── frontend/               # Next.js React application
+├── docker-compose.yml      # Container orchestration
+├── update_personality.sh   # Convenience script
+└── init_volume.sh         # Setup verification script
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# Backend configuration
+OLLAMA_BASE_URL=http://ollama-ai-project:11434
+PYTHONUNBUFFERED=1
+
+# Ollama configuration
+OLLAMA_HOST=0.0.0.0
+OLLAMA_ORIGINS=*
+OLLAMA_KEEP_ALIVE=5m
+```
+
+### Docker Resources
+
+The system is configured with optimized resource limits:
+
+- **Ollama**: 12GB memory, 6 CPUs
+- **Backend**: 6GB memory, 3 CPUs  
+- **Frontend**: 1GB memory, 0.5 CPUs
+
+## 🎨 Personality Examples
+
+### Professional/Medical
+```markdown
+# AI Assistant Personality - Professional Mode
+
+You are a professional, medical-focused AI assistant:
+
+## Core Personality
+- **Professional and formal**: Use medical terminology appropriately
+- **Patient and thorough**: Take time to explain concepts clearly
+- **Encouraging**: Support users in their learning journey
+- **Humble**: Acknowledge limitations and be honest about what you don't know
+
+## Communication Style
+- **Clear and concise**: Provide well-structured responses
+- **Use medical terminology**: When appropriate and accurate
+- **Include context**: Always reference source documents
+```
+
+### Academic/Research
+```markdown
+# AI Assistant Personality - Academic Mode
+
+You are a scholarly, research-oriented AI assistant:
+
+## Core Personality
+- **Scholarly and precise**: Use formal, academic language
+- **Analytical**: Approach questions with systematic analysis
+- **Thorough**: Provide comprehensive, well-researched responses
+- **Objective**: Maintain neutrality and present balanced perspectives
+
+## Communication Style
+- **Formal tone**: Use professional, academic language
+- **Structured responses**: Organize information with clear headings
+- **Citations**: Reference sources and provide context
+```
+
+### Creative/Storytelling
+```markdown
+# AI Assistant Personality - Creative Mode
+
+You are a creative, imaginative AI assistant:
+
+## Core Personality
+- **Imaginative and creative**: Use vivid language and metaphors
+- **Storytelling approach**: Frame responses as narratives when appropriate
+- **Enthusiastic and engaging**: Show excitement and passion for topics
+- **Playful and fun**: Use humor while staying helpful
+
+## Communication Style
+- **Vivid descriptions**: Use colorful, descriptive language
+- **Metaphors and analogies**: Explain concepts through creative comparisons
+- **Storytelling elements**: Use narrative structure when helpful
+```
+
+## 🔍 API Reference
+
+### Core Endpoints
+
+```bash
+# Main query endpoint
+POST /ask-ollama
+POST /ask
+
+# Status and monitoring
+GET /status
+GET /performance
+
+# Personality management
+GET /personality
+POST /personality/reload
+
+# Knowledge base management
+POST /knowledge-base/reload
+
+# Training and feedback
+POST /train-ollama
+POST /train
+POST /feedback
+```
+
+### Response Format
+
+```json
+{
+  "answer": "AI response with personality applied",
+  "sources": [
+    {
+      "filename": "document.md",
+      "folder_path": "category",
+      "relevance": 85.5,
+      "content": "Relevant content excerpt"
+    }
+  ],
+  "method": "ollama_with_context",
+  "ai_used": true,
+  "fallback_used": false
+}
+```
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+1. **Personality not updating**: Run `./update_personality.sh`
+2. **New documents not detected**: Call `/knowledge-base/reload` endpoint
+3. **Container not starting**: Check logs with `docker logs my_ai_project-backend-1`
+4. **Memory issues**: Increase Docker memory limits in `docker-compose.yml`
+
+### Debug Commands
+
+```bash
+# Check container status
+docker ps
+
+# View backend logs
+docker logs my_ai_project-backend-1
+
+# Check knowledge base files
+docker exec my_ai_project-backend-1 ls -la /app/knowledge_base/
+
+# Test personality system
+curl -s http://localhost:5557/personality
+
+# Test knowledge base
+curl -s http://localhost:5557/status
+```
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -203,6 +366,6 @@ The system uses Ollama for all AI operations:
 4. Test with Docker: `./build_docker.sh && docker-compose up`
 5. Submit a pull request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License.

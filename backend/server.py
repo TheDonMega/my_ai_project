@@ -35,6 +35,7 @@ OLLAMA_AVAILABLE = False
 OLLAMA_TRAINER = None
 MODEL_PRELOADED = False
 PERSONALITY_PROMPT = ""
+kb = []  # Global knowledge base variable
 
 def load_personality_prompt():
     """Load personality/behavior prompt from behavior.md file"""
@@ -98,7 +99,6 @@ except ImportError as e:
 # Load personality prompt on startup
 load_personality_prompt()
 
-# --- Setup ---
 # Load environment variables from .env file
 load_dotenv()
 
@@ -137,6 +137,12 @@ def load_knowledge_base(folder_path="/app/knowledge_base"):
     load_recursive(folder_path, folder_path)
     print(f"Loaded {len(knowledge)} documents from {folder_path} and subfolders.")
     return knowledge
+
+def reload_knowledge_base():
+    """Reload the knowledge base from disk"""
+    global kb
+    kb = load_knowledge_base()
+    return len(kb)
 
 # --- 2. Search for Relevant Context ---
 def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased default results
@@ -389,13 +395,13 @@ app = Flask(__name__)
 CORS(app)
 
 # Load knowledge base at startup
-kb = load_knowledge_base()
+reload_knowledge_base()
 
 @app.route('/status', methods=['GET'])
 def status():
     return jsonify({
         'status': 'running',
-        'documents_loaded': len(kb)
+        'documents_loaded': reload_knowledge_base()
     })
 
 @app.route('/ask', methods=['POST'])
@@ -1117,6 +1123,24 @@ def reload_personality():
             'error': f'Failed to reload personality: {str(e)}'
         }), 500
 
+@app.route('/knowledge-base/reload', methods=['POST'])
+def reload_knowledge_base_endpoint():
+    """Reload knowledge base from disk"""
+    try:
+        document_count = reload_knowledge_base()
+        return jsonify({
+            'success': True,
+            'message': f'Knowledge base reloaded successfully with {document_count} documents',
+            'documents_loaded': document_count
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to reload knowledge base: {str(e)}'
+        }), 500
+
 if __name__ == "__main__":
+    # Initialize knowledge base at startup
+    reload_knowledge_base()
     print(f"Starting server... Knowledge base loaded with {len(kb)} documents.")
     app.run(host='0.0.0.0', port=5557)
