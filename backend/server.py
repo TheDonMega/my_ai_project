@@ -77,19 +77,24 @@ def status():
 def ask():
     """Handle a user's question"""
     if not SEARCH_MANAGER or not SEARCH_MANAGER.llamaindex_available:
+        app.logger.error("Search manager not available")
         return jsonify({'error': 'LlamaIndex is not available or not initialized.'}), 503
 
     data = request.json
     if not data or 'question' not in data:
+        app.logger.error("No question provided in request")
         return jsonify({'error': 'No question provided'}), 400
 
     user_question = data['question']
+    app.logger.info(f"Received question: {user_question}")
     
     # Add personality prompt to the query
     full_query = f"{get_personality_prompt()}\n\nUser question: {user_question}"
+    app.logger.info(f"Full query with personality: {full_query}")
 
     try:
         result = SEARCH_MANAGER.query_with_llamaindex(query=full_query)
+        app.logger.info(f"Search manager result: {result}")
         
         if result['success']:
             return jsonify({
@@ -100,6 +105,7 @@ def ask():
                 'fallback_used': False
             })
         else:
+            app.logger.error(f"Search manager returned error: {result.get('error')}")
             return jsonify({
                 'error': result.get('error', 'An unknown error occurred.'),
                 'answer': 'I could not process your request.',
@@ -107,7 +113,7 @@ def ask():
             }), 500
             
     except Exception as e:
-        print(f"Error in /ask endpoint: {e}")
+        app.logger.error(f"Error in /ask endpoint: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/llamaindex/rebuild', methods=['POST'])

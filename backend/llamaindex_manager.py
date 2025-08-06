@@ -271,7 +271,7 @@ class LlamaIndexManager:
         start_time = time.time()
         
         try:
-            self.logger.info("🚀 Starting index build...")
+            self.logger.info(f"🚀 Starting index build... force_rebuild={force_rebuild}")
             
             # Load documents
             documents = self._load_documents_from_knowledge_base()
@@ -285,30 +285,40 @@ class LlamaIndexManager:
                     'indexing_time': 0
                 }
             
-            # Force rebuild if requested
-            if force_rebuild:
-                index_path = os.path.join(self.vector_store_path, "index")
-                if os.path.exists(index_path):
-                    import shutil
-                    shutil.rmtree(index_path)
-                    self.logger.info("🗑️ Removed existing index for rebuild")
+            index_path = os.path.join(self.vector_store_path, "index")
             
-            # Create or load index
-            self.index = self._create_or_load_index(documents)
-            
-            if not self.index:
-                return {
-                    'success': False,
-                    'error': 'Failed to create index',
-                    'documents_processed': 0,
-                    'chunks_created': 0,
-                    'indexing_time': 0
-                }
-            
-            # Setup query engine
+            if force_rebuild and os.path.exists(index_path):
+                import shutil
+                shutil.rmtree(index_path)
+                self.logger.info("🗑️ Removed existing index for rebuild")
+
+            if not os.path.exists(index_path):
+                # Create new index
+                self.logger.info("No existing index found, creating new one...")
+                storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+                self.index = VectorStoreIndex.from_documents(
+                    documents,
+                    storage_context=storage_context,
+                    show_progress=True
+                )
+                self.index.storage_context.persist(persist_dir=index_path)
+                self.logger.info("✅ Created and saved new index")
+            else:
+                # Load existing index and update it
+                self.logger.info("Found existing index, loading and updating...")
+                storage_context = StorageContext.from_defaults(
+                    vector_store=self.vector_store, persist_dir=index_path
+                )
+                self.index = load_index_from_storage(storage_context)
+
+                # Refresh index with new documents
+                refreshed_docs = self.index.refresh(documents)
+                self.logger.info(f"🔄 Refreshed index. New documents: {refreshed_docs}")
+                self.index.storage_context.persist(persist_dir=index_path)
+
+
             self._setup_query_engine()
             
-            # Update stats
             indexing_time = time.time() - start_time
             self.indexing_stats.update({
                 'documents_processed': len(documents),
@@ -328,7 +338,7 @@ class LlamaIndexManager:
             }
             
         except Exception as e:
-            self.logger.error(f"❌ Error building index: {e}")
+            self.logger.error(f"❌ Error building index: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e),

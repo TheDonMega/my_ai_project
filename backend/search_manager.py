@@ -41,6 +41,7 @@ class SearchManager:
     def _initialize_llamaindex(self):
         """Initialize LlamaIndex manager"""
         try:
+            self.logger.info("Initializing LlamaIndexManager...")
             self.llamaindex_manager = LlamaIndexManager(
                 knowledge_base_path=self.knowledge_base_path,
                 vector_store_path=self.vector_store_path,
@@ -49,7 +50,8 @@ class SearchManager:
                 llm_model=self.llm_model,
                 use_chroma=self.use_chroma
             )
-            build_result = self.llamaindex_manager.build_index()
+            self.logger.info("LlamaIndexManager initialized. Building index...")
+            build_result = self.llamaindex_manager.build_index(force_rebuild=False) # Don't force rebuild on startup
             if build_result['success']:
                 self.llamaindex_available = True
                 self.logger.info("✅ LlamaIndex initialized successfully")
@@ -57,7 +59,7 @@ class SearchManager:
                 self.logger.warning(f"⚠️ LlamaIndex build failed: {build_result.get('error')}")
                 self.llamaindex_available = False
         except Exception as e:
-            self.logger.error(f"❌ Error initializing LlamaIndex: {e}")
+            self.logger.error(f"❌ Error initializing LlamaIndex: {e}", exc_info=True)
             self.llamaindex_available = False
 
     def query_with_llamaindex(self,
@@ -66,19 +68,24 @@ class SearchManager:
                              similarity_threshold: float = 0.7,
                              top_k: int = 5) -> Dict[str, Any]:
         """Query using LlamaIndex with full RAG pipeline"""
+        self.logger.info(f"Querying LlamaIndex with query: {query}")
         if not self.llamaindex_available:
+            self.logger.error("LlamaIndex not available for query")
             return {
                 'success': False,
                 'error': 'LlamaIndex not available',
                 'response': None,
                 'sources': []
             }
-        return self.llamaindex_manager.query(
+
+        result = self.llamaindex_manager.query(
             query=query,
             use_cache=use_cache,
             similarity_threshold=similarity_threshold,
             top_k=top_k
         )
+        self.logger.info(f"LlamaIndex query result: {result}")
+        return result
 
     def rebuild_index(self, force_rebuild: bool = True) -> Dict[str, Any]:
         """Rebuild the LlamaIndex"""
