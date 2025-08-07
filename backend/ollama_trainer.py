@@ -13,11 +13,11 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 class OllamaTrainer:
-    def __init__(self, ollama_url: str = "http://localhost:11434"):
+    def __init__(self, ollama_url: str = "http://host.docker.internal:11434"):
         self.ollama_url = ollama_url
-        self.model_name = "ollama"  # Changed from "mistral" to "ollama"
-        self.training_data_file = "/app/ollama_training_data.json"
-        self.feedback_training_file = "/app/feedback_training_data.json"
+        self.model_name = "llama3.2:3b"  # Use the specified model
+        self.training_data_file = "/app/local_models/ollama_training_data.json"
+        self.feedback_training_file = "/app/local_models/feedback_training_data.json"
         # Add caching for performance
         self.response_cache = {}
         self.cache_ttl = 3600  # 1 hour cache TTL
@@ -67,13 +67,13 @@ class OllamaTrainer:
             return trained_models[0]  # Return the first trained model
         
         # Fallback to base models
-        base_models = ["llama2", "mistral", "llama2:7b"]
+        base_models = ["llama3.2:3b", "llama2", "mistral", "llama2:7b"]
         for model in available_models:
             if any(base_model in model for base_model in base_models):
                 return model
         
         # Default fallback
-        return "llama2"
+        return "llama3.2:3b"
     
     def create_training_data_from_knowledge_base(self, knowledge_base_path: str = "/app/knowledge_base") -> List[Dict[str, Any]]:
         """Create training data from knowledge base documents"""
@@ -285,6 +285,9 @@ class OllamaTrainer:
     def save_training_data(self, training_data: List[Dict[str, Any]], filename: str):
         """Save training data to file"""
         try:
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump({
                     "training_data": training_data,
@@ -336,7 +339,7 @@ class OllamaTrainer:
                 })
             
             # Save training data for Ollama in the correct format
-            training_file = "/app/ollama_training.jsonl"
+            training_file = "/app/local_models/ollama_training.jsonl"
             with open(training_file, 'w', encoding='utf-8') as f:
                 for item in ollama_training_data:
                     # Use the exact format Ollama expects
@@ -363,7 +366,7 @@ PARAMETER stop "Assistant:"
 TRAIN {training_file}
 """
             
-            modelfile_path = "/app/Modelfile"
+            modelfile_path = "/app/local_models/Modelfile"
             with open(modelfile_path, 'w', encoding='utf-8') as f:
                 f.write(modelfile_content)
             
@@ -467,7 +470,7 @@ TRAIN {training_file}
         content = f"{question}:{context}"
         return hashlib.md5(content.encode()).hexdigest()
     
-    def query_ollama(self, question: str, context: str = "") -> Optional[str]:
+    def query_ollama(self, question: str, context: str = "", stream: bool = False) -> Optional[str]:
         """Query the trained Ollama model with performance optimizations and personality prompt"""
         if not self.check_ollama_status():
             return None
@@ -520,7 +523,7 @@ Please provide a helpful response based on the context provided. If the context 
             response = requests.post(f"{self.ollama_url}/api/generate", json={
                 "model": best_model,
                 "prompt": prompt,
-                "stream": False,
+                "stream": stream,
                 "options": {
                     "temperature": 0.3,  # Lower temperature for faster, more focused responses
                     "top_p": 0.8,        # Slightly lower for speed
@@ -550,6 +553,97 @@ Please provide a helpful response based on the context provided. If the context 
         except Exception as e:
             print(f"❌ Exception with model {best_model}: {e}")
             return None
+    
+    def query_ollama_stream(self, question: str, context: str = ""):
+        """Stream query to Ollama model - yields response chunks"""
+        if not self.check_ollama_status():
+            yield "data: {\"error\": \"Ollama not available\"}\n\n"
+            return
+        
+        # Get the best available model - prefer base models over trained ones for streaming
+        available_models = self.get_available_models()
+        best_model = "llama3.2:3b"  # Default to the base model
+        
+        # Try to find the base model first
+        for model in available_models:
+            if model == "llama3.2:3b":
+                best_model = model
+                break
+            elif model == "llama2":
+                best_model = model
+                break
+        
+        print(f"🎯 Streaming with model: {best_model}")
+        
+        try:
+            # Optimize context length for speed
+            max_context_length = 2000  # Limit context to improve speed
+            if len(context) > max_context_length:
+                context = context[:max_context_length] + "... [truncated for performance]"
+            
+            # Get personality prompt from server
+            try:
+                from server import get_personality_prompt
+                personality_prompt = get_personality_prompt()
+            except ImportError:
+                personality_prompt = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
+            
+            prompt = f"""{personality_prompt}
+
+Context from knowledge base:
+{context}
+
+User question: {question}
+
+Please provide a helpful response based on the context provided. If the context doesn't contain enough information, say so clearly."""
+
+            print(f"📤 Sending streaming request to Ollama with model: {best_model}")
+            
+            # Stream request to Ollama
+            response = requests.post(f"{self.ollama_url}/api/generate", json={
+                "model": best_model,
+                "prompt": prompt,
+                "stream": True,
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.8,
+                    "top_k": 40,
+                    "num_predict": 150,
+                    "repeat_penalty": 1.1,
+                    "num_ctx": 2048,
+                    "num_thread": 4
+                }
+            }, stream=True)
+            
+            print(f"📥 Received response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                for line in response.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        print(f"🔍 Processing line: {line_str[:100]}...")
+                        
+                        try:
+                            data = json.loads(line_str)
+                            if 'response' in data:
+                                print(f"📝 Streaming chunk: {data['response'][:50]}...")
+                                yield f"data: {{\"response\": \"{data['response']}\"}}\n\n"
+                            if data.get('done', False):
+                                print("✅ Streaming complete")
+                                yield f"data: {{\"done\": true}}\n\n"
+                                break
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ JSON decode error: {e}")
+                            continue
+            else:
+                error_data = response.json() if response.content else {}
+                error_message = error_data.get("error", f"HTTP {response.status_code}")
+                print(f"❌ Ollama error: {error_message}")
+                yield f"data: {{\"error\": \"{error_message}\"}}\n\n"
+                    
+        except Exception as e:
+            print(f"❌ Exception with streaming model {best_model}: {e}")
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
     
     def train(self, knowledge_base_path: str = "/app/knowledge_base") -> Dict[str, Any]:
         """Main training function"""

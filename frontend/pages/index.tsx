@@ -128,6 +128,110 @@ export default function Home() {
     setLoading(false);
   };
 
+  const handleOllamaStreaming = async () => {
+    if (!question.trim()) return;
+    
+    setLoading(true);
+    setAnswer(null);
+    setProcessingStep('Starting streaming analysis...');
+    
+    try {
+      // Initialize answer with empty response
+      setAnswer({
+        answer: '',
+        sources: [],
+        method: 'ollama_streaming',
+        ai_used: true,
+        fallback_used: false
+      });
+      
+      const response = await fetch('http://localhost:5557/ask-ollama-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.error) {
+                setAnswer(prev => prev ? {
+                  ...prev,
+                  answer: `Error: ${data.error}`
+                } : {
+                  answer: `Error: ${data.error}`,
+                  sources: []
+                });
+                break;
+              }
+              
+              if (data.sources) {
+                setAnswer(prev => prev ? {
+                  ...prev,
+                  sources: data.sources
+                } : {
+                  answer: '',
+                  sources: data.sources
+                });
+              }
+              
+              if (data.response) {
+                setAnswer(prev => prev ? {
+                  ...prev,
+                  answer: prev.answer + data.response
+                } : {
+                  answer: data.response,
+                  sources: []
+                });
+              }
+              
+              if (data.done) {
+                break;
+              }
+            } catch (e) {
+              console.error('Error parsing streaming data:', e);
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error:', error);
+      setAnswer({
+        answer: 'Error occurred while streaming from Ollama.',
+        sources: []
+      });
+    }
+    
+    setProcessingStep('');
+    setLoading(false);
+  };
+
   const handleStepResponse = async (response: string) => {
     setLoading(true);
     
@@ -430,6 +534,14 @@ export default function Home() {
             disabled={loading || !question.trim()}
           >
             {loading ? 'Processing...' : 'Use Ollama Locally'}
+          </button>
+          <button 
+            type="button" 
+            className={styles.ollamaStreamingButton} 
+            onClick={handleOllamaStreaming}
+            disabled={loading || !question.trim()}
+          >
+            {loading ? 'Streaming...' : '🚀 Stream with Ollama'}
           </button>
         </div>
       </form>

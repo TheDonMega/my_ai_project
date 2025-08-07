@@ -151,6 +151,10 @@ curl -s http://localhost:5557/training/stats
 
 ## 🎯 AI Training & Feedback
 
+### Local Model Management
+
+The system now uses Ollama running locally on your machine. Models are stored in your local Ollama directory (`~/.ollama/models` on macOS/Linux) and training data is stored in the `local_models/` directory.
+
 ### Training Custom Models
 
 Train Ollama models on your knowledge base and feedback data:
@@ -199,7 +203,32 @@ curl -s http://localhost:5557/training/history
 
 ## 🚀 Quick Start
 
-### 1. Build and Start
+### 1. Install Ollama Locally
+
+First, install Ollama on your local machine:
+
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Windows
+# Download from https://ollama.ai/download
+```
+
+### 2. Start Ollama and Pull Base Models
+
+```bash
+# Start Ollama service
+ollama serve
+
+# In another terminal, pull the base model
+ollama pull llama2
+```
+
+### 3. Build and Start the Application
 
 ```bash
 # Build and start all services
@@ -231,7 +260,7 @@ nano ./knowledge_base/behavior.md
 
 - **Frontend**: http://localhost:5556
 - **Backend**: http://localhost:5557
-- **Ollama**: http://localhost:11434
+- **Ollama**: http://localhost:11434 (running locally)
 
 ## 📁 Project Structure
 
@@ -241,6 +270,10 @@ my_ai_project/
 │   ├── behavior.md          # AI personality configuration
 │   ├── README.md
 │   └── your-documents.md
+├── local_models/            # Local trained models and training data
+│   ├── ollama_training_data.json
+│   ├── feedback_training_data.json
+│   └── Modelfile
 ├── backend/                 # Python Flask server
 │   ├── server.py           # Main server with personality system
 │   ├── ollama_trainer.py   # Model training and management
@@ -257,22 +290,20 @@ my_ai_project/
 
 ```bash
 # Backend configuration
-OLLAMA_BASE_URL=http://ollama-ai-project:11434
+OLLAMA_BASE_URL=http://host.docker.internal:11434
 PYTHONUNBUFFERED=1
 
-# Ollama configuration
-OLLAMA_HOST=0.0.0.0
-OLLAMA_ORIGINS=*
-OLLAMA_KEEP_ALIVE=5m
+# Local Ollama configuration (running on host)
+# Ollama runs on localhost:11434 by default
 ```
 
 ### Docker Resources
 
 The system is configured with optimized resource limits:
 
-- **Ollama**: 12GB memory, 6 CPUs
 - **Backend**: 6GB memory, 3 CPUs  
 - **Frontend**: 1GB memory, 0.5 CPUs
+- **Ollama**: Running locally on host (not containerized)
 
 ## 🎨 Personality Examples
 
@@ -383,6 +414,8 @@ POST /feedback
 2. **New documents not detected**: Call `/knowledge-base/reload` endpoint
 3. **Container not starting**: Check logs with `docker logs my_ai_project-backend-1`
 4. **Memory issues**: Increase Docker memory limits in `docker-compose.yml`
+5. **Ollama connection issues**: Ensure Ollama is running locally with `ollama serve`
+6. **Model not found**: Pull the base model with `ollama pull llama2`
 
 ### Debug Commands
 
@@ -401,6 +434,12 @@ curl -s http://localhost:5557/personality
 
 # Test knowledge base
 curl -s http://localhost:5557/status
+
+# Check local Ollama status
+curl -s http://localhost:11434/api/tags
+
+# List available Ollama models
+ollama list
 ```
 
 ## 🤝 Contributing

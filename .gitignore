@@ -20,6 +20,9 @@ vector_store/**/*.hdf5
 vector_store/**/*.npy
 vector_store/**/*.npz
 
+# Local models and training data (excluded from version control)
+local_models/
+
 # Python
 __pycache__/
 *.py[cod]

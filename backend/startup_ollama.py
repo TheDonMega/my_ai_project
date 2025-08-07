@@ -15,7 +15,7 @@ def wait_for_ollama():
     max_attempts = 60  # Increased for startup
     for attempt in range(max_attempts):
         try:
-            response = requests.get("http://ollama-ai-project:11434/api/tags", timeout=5)
+            response = requests.get("http://host.docker.internal:11434/api/tags", timeout=5)
             if response.status_code == 200:
                 print("✅ Ollama service is ready!")
                 return True
@@ -32,7 +32,7 @@ def wait_for_ollama():
 def check_model_exists(model_name):
     """Check if a model exists"""
     try:
-        response = requests.get("http://ollama-ai-project:11434/api/tags", timeout=5)
+        response = requests.get("http://host.docker.internal:11434/api/tags", timeout=5)
         if response.status_code == 200:
             models = response.json().get("models", [])
             for model in models:
@@ -51,7 +51,7 @@ def pull_model(model_name):
     try:
         # Start the pull request
         response = requests.post(
-            "http://ollama-ai-project:11434/api/pull",
+            "http://host.docker.internal:11434/api/pull",
             json={"name": model_name},
             timeout=30
         )
@@ -94,23 +94,39 @@ def main():
         print("❌ Cannot proceed without Ollama service")
         sys.exit(1)
     
-    # Check if mistral model exists
-    if check_model_exists("mistral"):
-        print("✅ mistral model already exists")
+    # Get the model name from environment variable or use default
+    model_name = os.getenv("LLM_MODEL", "llama3.2:3b")
+    print(f"🔍 Checking for model: {model_name}")
+    
+    # Check if the specified model exists
+    if check_model_exists(model_name):
+        print(f"✅ {model_name} model already exists")
         return True
     
-    # Pull the mistral model
-    print("📥 Pulling mistral model (this may take a while)...")
-    if pull_model("mistral"):
+    # Try to find any available model
+    try:
+        response = requests.get("http://host.docker.internal:11434/api/tags", timeout=5)
+        if response.status_code == 200:
+            models = response.json().get("models", [])
+            if models:
+                available_model = models[0]["name"]
+                print(f"✅ Found available model: {available_model}")
+                return True
+    except Exception as e:
+        print(f"❌ Error checking available models: {e}")
+    
+    # Pull the specified model
+    print(f"📥 Pulling {model_name} model (this may take a while)...")
+    if pull_model(model_name):
         # Wait for download to complete
-        if wait_for_model_download("mistral"):
-            print("✅ mistral model is ready for use!")
+        if wait_for_model_download(model_name):
+            print(f"✅ {model_name} model is ready for use!")
             return True
         else:
-            print("❌ mistral model download failed")
+            print(f"❌ {model_name} model download failed")
             sys.exit(1)
     else:
-        print("❌ Failed to start pulling mistral model")
+        print(f"❌ Failed to start pulling {model_name} model")
         sys.exit(1)
 
 if __name__ == "__main__":

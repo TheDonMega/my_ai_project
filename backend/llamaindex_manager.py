@@ -40,9 +40,9 @@ class LlamaIndexManager:
     def __init__(self, 
                  knowledge_base_path: str = "/app/knowledge_base",
                  vector_store_path: str = "/app/vector_store",
-                 ollama_base_url: str = "http://localhost:11434",
+                 ollama_base_url: str = "http://host.docker.internal:11434",
                  embedding_model: str = "nomic-embed-text",
-                 llm_model: str = "llama2",
+                 llm_model: str = "llama3.2:3b",
                  use_chroma: bool = True,
                  chunk_size: int = 1024,  # Increased for better context
                  chunk_overlap: int = 200):  # Increased overlap for better continuity

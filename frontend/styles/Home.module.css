@@ -247,6 +247,28 @@
   background-color: #7C3AED;
 }
 
+.ollamaStreamingButton {
+  flex: 1;
+  padding: 12px 20px;
+  background-color: #10B981;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.ollamaStreamingButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.ollamaStreamingButton:hover:not(:disabled) {
+  background-color: #059669;
+}
+
 .button { padding: 10px 20px; background-color: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 1rem; }
 .button:disabled { background-color: #ccc; cursor: not-allowed; }
 .button:hover:not(:disabled) { background-color: #0051c3; }

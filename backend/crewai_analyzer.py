@@ -23,7 +23,7 @@ class CrewAIAnalyzer:
             from langchain_community.embeddings import OllamaEmbeddings
             
             # Get Ollama base URL from environment (for Docker) or use default
-            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11435")
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
             
             # You can change this model name to use different models:
             # - "llama2" (default)

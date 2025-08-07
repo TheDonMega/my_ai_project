@@ -8,6 +8,16 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# Check if Ollama is running locally
+if ! curl -s http://localhost:11434/api/tags &> /dev/null; then
+    echo "❌ Ollama is not running locally. Please start Ollama first:"
+    echo "   ollama serve"
+    echo "   Then run this script again."
+    exit 1
+fi
+
+echo "✅ Ollama is running locally"
+
 # Build the backend container
 echo "🔨 Building backend container..."
 docker-compose build backend
@@ -51,4 +61,7 @@ echo "🔧 To stop services:"
 echo "   docker-compose down"
 echo ""
 echo "💡 To check Ollama models:"
-echo "   docker exec ollama-ai-project ollama list" 
+echo "   ollama list"
+echo ""
+echo "💡 To check if Ollama is running:"
+echo "   curl -s http://localhost:11434/api/tags" 

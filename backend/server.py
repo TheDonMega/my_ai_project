@@ -1,5 +1,6 @@
 # server.py
 import os
+import json
 from dotenv import load_dotenv
 from datetime import datetime
 import time # Added for fast_llamaindex_query
@@ -112,7 +113,7 @@ try:
     if HYBRID_SEARCH_AVAILABLE:
         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         embedding_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-        llm_model = os.getenv("LLM_MODEL", "llama2")
+        llm_model = os.getenv("LLM_MODEL", "llama3.2:3b")
         use_chroma = os.getenv("USE_CHROMA", "true").lower() == "true"
         hybrid_weight = float(os.getenv("HYBRID_WEIGHT", "0.7"))
         
@@ -424,7 +425,7 @@ def ask_ollama_with_context(query, context_documents):
     return "Error: Unable to get response from any Ollama model. Please check if Ollama is running and has available models."
 
 # --- Flask Web Server Setup ---
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -1121,6 +1122,68 @@ def ask_ollama():
         return jsonify({
             'error': f'Error processing Ollama query: {str(e)}'
         }), 500
+
+@app.route('/ask-ollama-stream', methods=['POST'])
+def ask_ollama_stream():
+    """Stream question using Ollama with knowledge base context"""
+    if not OLLAMA_AVAILABLE:
+        return jsonify({
+            'error': 'Ollama trainer not available'
+        }), 500
+
+    if not kb:
+        return jsonify({
+            'error': 'Knowledge base is empty or not found. Please add .md files to the /app/knowledge_base folder.'
+        }), 500
+
+    data = request.json
+    if not data or 'question' not in data:
+        return jsonify({'error': 'No question provided'}), 400
+
+    user_question = data['question']
+    
+    def generate():
+        try:
+            # Search knowledge base for relevant context
+            relevant_docs = search_knowledge_base(user_question, kb, num_results=3)
+            
+            if not relevant_docs:
+                yield f"data: {{\"error\": \"I couldn't find any relevant information in the knowledge base for your question.\"}}\n\n"
+                return
+            
+            # Prepare context from relevant documents
+            context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
+            
+            # Send sources info first
+            sources = [{
+                'filename': doc['filename'],
+                'folder_path': doc['folder_path'],
+                'relevance': doc['relevance'],
+                'header': doc['header'] if doc['header'] else 'No header',
+                'content': doc['section'],
+                'full_document_available': True
+            } for doc in relevant_docs]
+            
+            yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
+            
+            # Query Ollama with streaming
+            global OLLAMA_TRAINER
+            
+            if OLLAMA_TRAINER:
+                for chunk in OLLAMA_TRAINER.query_ollama_stream(user_question, context):
+                    yield chunk
+            else:
+                # Fallback to creating a new instance
+                ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                ollama_trainer = OllamaTrainer(ollama_url)
+                for chunk in ollama_trainer.query_ollama_stream(user_question, context):
+                    yield chunk
+                    
+        except Exception as e:
+            print(f"Error in streaming Ollama query: {e}")
+            yield f"data: {{\"error\": \"Error processing streaming Ollama query: {str(e)}\"}}\n\n"
+    
+    return Response(generate(), mimetype='text/plain')
 
 @app.route('/train-ollama', methods=['POST'])
 def train_ollama():
