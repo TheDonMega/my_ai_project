@@ -4,6 +4,16 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
 
 ## Features
 
+- **🤖 Advanced Model Management**: Select and switch between available Ollama models dynamically
+  - View all available models with detailed information (size, type, running status)
+  - Start/stop models on demand
+  - Auto-detect trained vs. base models
+  - Real-time model status monitoring
+- **📁 Smart File Inclusion Control**: Choose whether to include knowledge base files in AI responses
+  - Toggle knowledge base search on/off
+  - General knowledge mode for faster responses
+  - Context-aware mode for document-specific queries
+- **🚀 Streaming Responses**: Real-time streaming responses with selected models
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
 - **Advanced RAG System**: LlamaIndex integration with vector search and semantic similarity
 - **Hybrid Search**: Combines vector search with traditional keyword search for optimal results
@@ -39,6 +49,25 @@ This project now includes **advanced RAG capabilities** with LlamaIndex integrat
 
 ### **API Endpoints**
 ```bash
+# Model Management
+curl http://localhost:5557/models                    # List all available models
+curl http://localhost:5557/models/running            # List running models
+curl -X POST http://localhost:5557/models/select \   # Select a model
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "llama3.2:3b"}'
+curl -X POST http://localhost:5557/models/llama3.2:3b/start  # Start a model
+curl -X POST http://localhost:5557/models/llama3.2:3b/stop   # Stop a model
+
+# New Query with Model Selection
+curl -X POST http://localhost:5557/query-with-model \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Your question", "include_files": true, "model_name": "llama3.2:3b"}'
+
+# Streaming with Model Selection
+curl -X POST http://localhost:5557/query-with-model-stream \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Your question", "include_files": true}'
+
 # Check LlamaIndex status
 curl http://localhost:5557/llamaindex/status
 
@@ -59,6 +88,76 @@ curl -X POST http://localhost:5557/llamaindex/rebuild \
 ```
 
 📖 **For detailed LlamaIndex documentation, see [LLAMAINDEX_INTEGRATION.md](LLAMAINDEX_INTEGRATION.md)**
+
+## 🤖 Model Management System
+
+The AI Knowledge Base Analyzer now includes a comprehensive model management system that allows you to:
+
+### **Features**
+- **View Available Models**: See all Ollama models installed on your system with detailed information
+- **Model Selection**: Choose which model to use for queries dynamically
+- **Start/Stop Models**: Control which models are loaded in memory for performance optimization
+- **Model Information**: View model size, type (trained vs. base), and running status
+- **File Inclusion Control**: Toggle whether AI responses should include knowledge base files
+
+### **Model Types**
+- **Base Models**: Original Ollama models (llama2, llama3.2:3b, mistral, etc.)
+- **Trained Models**: Custom models trained on your knowledge base (marked with `-trained` suffix)
+- **Running Models**: Models currently loaded in memory for faster responses
+
+### **Query Modes**
+1. **Knowledge-Based Mode** (include_files: true)
+   - AI searches your knowledge base for relevant context
+   - Provides document-specific answers with source citations
+   - Slower but more accurate for your content
+
+2. **General Knowledge Mode** (include_files: false)
+   - AI uses only its general training knowledge
+   - Faster responses for general questions
+   - No knowledge base search performed
+
+### **Model Management Commands**
+```bash
+# List all available models with details
+curl http://localhost:5557/models
+
+# Get currently running models
+curl http://localhost:5557/models/running
+
+# Select a specific model for queries
+curl -X POST http://localhost:5557/models/select \
+  -H "Content-Type: application/json" \
+  -d '{"model_name": "llama3.2:3b-trained"}'
+
+# Start a model (load into memory)
+curl -X POST http://localhost:5557/models/llama3.2:3b/start
+
+# Stop a model (unload from memory)
+curl -X POST http://localhost:5557/models/llama3.2:3b/stop
+
+# Get model statistics
+curl http://localhost:5557/models/stats
+```
+
+### **New Query Endpoints**
+```bash
+# Query with model selection and file inclusion control
+curl -X POST http://localhost:5557/query-with-model \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "What is this knowledge base about?",
+    "include_files": true,
+    "model_name": "llama3.2:3b-trained"
+  }'
+
+# Stream responses with model selection
+curl -X POST http://localhost:5557/query-with-model-stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Explain the main concepts",
+    "include_files": true
+  }'
+```
 
 ## 🎭 Personality System
 
@@ -366,7 +465,19 @@ You are a creative, imaginative AI assistant:
 ### Core Endpoints
 
 ```bash
-# Main query endpoint
+# Model Management (NEW)
+GET /models                           # List all available models
+GET /models/running                   # List running models
+POST /models/select                   # Select a model for queries
+POST /models/{model_name}/start       # Start/load a model
+POST /models/{model_name}/stop        # Stop/unload a model
+GET /models/stats                     # Get model statistics
+
+# New Query Endpoints (NEW)
+POST /query-with-model                # Query with selected model
+POST /query-with-model-stream         # Stream with selected model
+
+# Main query endpoints (Legacy)
 POST /ask-ollama
 POST /ask
 
@@ -400,7 +511,9 @@ POST /feedback
       "content": "Relevant content excerpt"
     }
   ],
-  "method": "ollama_with_context",
+  "method": "model_manager",
+  "model_used": "llama3.2:3b-trained",
+  "include_files": true,
   "ai_used": true,
   "fallback_used": false
 }

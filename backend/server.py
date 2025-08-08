@@ -32,6 +32,15 @@ except ImportError as e:
     OLLAMA_AVAILABLE = False
     print(f"⚠️  Ollama trainer not available: {e}")
 
+# Import Model Manager
+try:
+    from model_manager import model_manager, ModelManager
+    MODEL_MANAGER_AVAILABLE = True
+    print("✅ Model manager available")
+except ImportError as e:
+    MODEL_MANAGER_AVAILABLE = False
+    print(f"⚠️  Model manager not available: {e}")
+
 # Import LlamaIndex hybrid search system
 try:
     import hybrid_search
@@ -875,153 +884,15 @@ def get_feedback_stats():
     except Exception as e:
         return jsonify({'error': f'Error getting stats: {str(e)}'}), 500
 
-@app.route('/train', methods=['POST'])
-def train_knowledge_base():
-    """Trigger knowledge base training"""
-    try:
-        data = request.json
-        if not data or data.get('action') != 'train_knowledge_base':
-            return jsonify({'error': 'Invalid training action'}), 400
-        
-        # Import and run the training script
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        trainer.train()
-        
-        # Get updated document count
-        index = trainer.load_index()
-        documents_processed = index.get('total_files', 0) if index else 0
-        
-        return jsonify({
-            'success': True,
-            'message': 'Knowledge base training completed successfully',
-            'documents_processed': documents_processed,
-            'training_time': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        print(f"Training error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Training failed: {str(e)}'
-        }), 500
 
-@app.route('/training/status', methods=['GET'])
-def get_training_status():
-    """Get training status"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        status = trainer.get_training_status()
-        
-        return jsonify(status)
-        
-    except Exception as e:
-        print(f"Error getting training status: {e}")
-        return jsonify({
-            'error': f'Failed to get training status: {str(e)}'
-        }), 500
 
-@app.route('/training/stats', methods=['GET'])
-def get_training_stats():
-    """Get training statistics"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        index = trainer.load_index()
-        history = trainer.load_training_history()
-        
-        # Calculate stats
-        total_documents = index.get('total_files', 0) if index else 0
-        categories_trained = len(index.get('categories', {})) if index else 0
-        total_size = index.get('total_size', 0) if index else 0
-        
-        # Get last training time from index
-        last_training_time = index.get('last_updated', datetime.now().isoformat()) if index else datetime.now().isoformat()
-        
-        # Get actual training duration from history
-        training_duration = 0
-        if history:
-            latest_record = history[-1]
-            training_duration = latest_record.get('duration', 0)
-        
-        # Calculate improvement score based on document count and categories
-        improvement_score = min(100, (total_documents * 2) + (categories_trained * 10))
-        
-        stats = {
-            'total_documents': total_documents,
-            'last_training_time': last_training_time,
-            'training_duration': training_duration,
-            'documents_processed': total_documents,
-            'categories_trained': categories_trained,
-            'vector_store_size': total_size,
-            'improvement_score': improvement_score
-        }
-        
-        return jsonify(stats)
-        
-    except Exception as e:
-        print(f"Error getting training stats: {e}")
-        return jsonify({
-            'error': f'Failed to get training stats: {str(e)}'
-        }), 500
 
-@app.route('/training/history', methods=['GET'])
-def get_training_history():
-    """Get training history"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        history = trainer.load_training_history()
-        
-        return jsonify(history)
-        
-    except Exception as e:
-        print(f"Error getting training history: {e}")
-        return jsonify({
-            'error': f'Failed to get training history: {str(e)}'
-        }), 500
 
-@app.route('/training/feedback-insights', methods=['GET'])
-def get_feedback_insights():
-    """Get feedback learning insights"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        learning_data = trainer.load_feedback_learning_data()
-        
-        if not learning_data:
-            return jsonify({
-                'message': 'No feedback learning data available. Train the system first to see insights.',
-                'has_data': False
-            })
-        
-        feedback_patterns = learning_data.get('feedback_patterns', {})
-        
-        insights = {
-            'has_data': True,
-            'learning_summary': learning_data.get('learning_summary', {}),
-            'successful_patterns': len(feedback_patterns.get('successful_patterns', [])),
-            'common_issues': list(set(feedback_patterns.get('common_issues', []))),
-            'query_improvements': len(feedback_patterns.get('query_improvements', {})),
-            'high_rated_count': len(feedback_patterns.get('high_rated_queries', [])),
-            'low_rated_count': len(feedback_patterns.get('low_rated_queries', [])),
-            'response_guidelines': feedback_patterns.get('response_guidelines', {}),
-            'last_updated': learning_data.get('last_updated', 'Unknown')
-        }
-        
-        return jsonify(insights)
-        
-    except Exception as e:
-        print(f"Error getting feedback insights: {e}")
-        return jsonify({
-            'error': f'Failed to get feedback insights: {str(e)}'
-        }), 500
+
+
+
+
+
 
 @app.route('/ask-ollama', methods=['POST'])
 def ask_ollama():
@@ -1665,6 +1536,356 @@ def debug_llamaindex():
             'success': False,
             'error': str(e)
         }), 500
+
+# --- Model Management Endpoints ---
+
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Get list of available models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        models = model_manager.get_available_models()
+        model_data = []
+        
+        for model in models:
+            model_data.append({
+                'name': model.name,
+                'size': model.size,
+                'size_mb': round(model.size / (1024**2), 1),
+                'size_gb': round(model.size / (1024**3), 2),
+                'modified_at': model.modified_at,
+                'is_running': model.is_running,
+                'is_trained': model.is_trained,
+                'base_model': model.base_model,
+                'description': model.description
+            })
+        
+        return jsonify({
+            'success': True,
+            'models': model_data,
+            'total_models': len(model_data),
+            'selected_model': model_manager.get_selected_model()
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/running', methods=['GET'])
+def get_running_models():
+    """Get list of currently running models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        running_models = model_manager.get_running_models()
+        return jsonify({
+            'success': True,
+            'running_models': running_models,
+            'count': len(running_models)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/select', methods=['POST'])
+def select_model():
+    """Select a model for queries"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'model_name' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Model name is required'
+            }), 400
+        
+        model_name = data['model_name']
+        success = model_manager.set_selected_model(model_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'selected_model': model_name,
+                'message': f'Model {model_name} selected successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Model {model_name} not available'
+            }), 400
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_name>/start', methods=['POST'])
+def start_model(model_name):
+    """Start/load a model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        success = model_manager.start_model(model_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} started successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to start model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_name>/stop', methods=['POST'])
+def stop_model(model_name):
+    """Stop/unload a model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        success = model_manager.stop_model(model_name)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Model {model_name} stop requested'
+        })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/stats', methods=['GET'])
+def get_model_stats():
+    """Get model statistics"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        stats = model_manager.get_model_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/pull', methods=['POST'])
+def pull_model():
+    """Pull/download a new model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'model_name' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Model name is required'
+            }), 400
+        
+        model_name = data['model_name']
+        success = model_manager.pull_model(model_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} pulled successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to pull model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/query-with-model', methods=['POST'])
+def query_with_model():
+    """Query with selected model and optional file inclusion"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'question' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Question is required'
+            }), 400
+        
+        question = data['question']
+        include_files = data.get('include_files', True)
+        model_name = data.get('model_name')  # Optional override
+        
+        # Set model if specified
+        if model_name:
+            model_manager.set_selected_model(model_name)
+        
+        # Get context if including files
+        context = ""
+        sources = []
+        if include_files and kb:
+            relevant_docs = search_knowledge_base(question, kb, num_results=5)
+            if relevant_docs:
+                context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
+                sources = [{
+                    'filename': doc['filename'],
+                    'folder_path': doc['folder_path'],
+                    'relevance': doc['relevance'],
+                    'header': doc['header'] if doc['header'] else 'No header',
+                    'content': doc['section'],
+                    'full_document_available': True
+                } for doc in relevant_docs]
+        
+        # Query the model
+        response_text = model_manager.query_with_selected_model(
+            prompt=question,
+            stream=False,
+            include_files=include_files,
+            context=context
+        )
+        
+        if response_text:
+            return jsonify({
+                'success': True,
+                'answer': response_text,
+                'sources': sources,
+                'model_used': model_manager.get_selected_model(),
+                'include_files': include_files,
+                'method': 'model_manager'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to get response from model'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/query-with-model-stream', methods=['POST'])
+def query_with_model_stream():
+    """Stream query with selected model and optional file inclusion"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'error': 'Model manager not available'
+        }), 500
+    
+    data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({'error': 'Question is required'}), 400
+    
+    question = data['question']
+    include_files = data.get('include_files', True)
+    model_name = data.get('model_name')  # Optional override
+    
+    def generate():
+        try:
+            # Set model if specified
+            if model_name:
+                model_manager.set_selected_model(model_name)
+            
+            # Get context if including files
+            context = ""
+            sources = []
+            if include_files and kb:
+                relevant_docs = search_knowledge_base(question, kb, num_results=5)
+                if relevant_docs:
+                    context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
+                    sources = [{
+                        'filename': doc['filename'],
+                        'folder_path': doc['folder_path'],
+                        'relevance': doc['relevance'],
+                        'header': doc['header'] if doc['header'] else 'No header',
+                        'content': doc['section'],
+                        'full_document_available': True
+                    } for doc in relevant_docs]
+            
+            # Send metadata first
+            yield f"data: {{\"sources\": {json.dumps(sources)}, \"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
+            
+            # Stream the response
+            response_obj = model_manager.query_with_selected_model(
+                prompt=question,
+                stream=True,
+                include_files=include_files,
+                context=context
+            )
+            
+            if response_obj:
+                for line in response_obj.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        try:
+                            data = json.loads(line_str)
+                            if 'response' in data:
+                                yield f"data: {{\"response\": \"{data['response']}\"}}\n\n"
+                            if data.get('done', False):
+                                yield f"data: {{\"done\": true}}\n\n"
+                                break
+                        except json.JSONDecodeError:
+                            continue
+            else:
+                yield f"data: {{\"error\": \"Failed to get response from model\"}}\n\n"
+                
+        except Exception as e:
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+    
+    return Response(generate(), mimetype='text/plain')
 
 if __name__ == "__main__":
     # Initialize knowledge base at startup

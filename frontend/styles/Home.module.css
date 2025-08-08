@@ -1,40 +1,10 @@
 .container { max-width: 800px; margin: 0 auto; padding: 20px; }
 
-.navigation {
-  margin-bottom: 20px;
-  text-align: right;
-}
 
-.navLink {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 16px;
-  background-color: #f8f9fa;
-  color: #495057;
-  text-decoration: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: 1px solid #dee2e6;
-}
-
-.navLink:hover {
-  background-color: #e9ecef;
-  color: #212529;
-  text-decoration: none;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
 
 .status { margin-bottom: 20px; padding: 10px; background-color: #e8f5e9; border-radius: 4px; color: #2e7d32; }
 
-.lastTraining {
-  margin-top: 5px;
-  font-size: 0.9em;
-  color: #666;
-  font-style: italic;
-}
+
 
 .trainingSection {
   margin-bottom: 30px;
@@ -51,11 +21,40 @@
   margin-bottom: 15px;
 }
 
-.trainingButtons {
+.trainingTitle {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
 }
+
+.collapseButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collapseButton:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.collapseIcon {
+  font-size: 12px;
+  color: #6c757d;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+.collapseIcon.collapsed {
+  transform: rotate(-90deg);
+}
+
+
 
 .trainingHeader h3 {
   margin: 0;
@@ -77,31 +76,7 @@
   gap: 5px;
 }
 
-.dashboardButton {
-  padding: 10px 20px;
-  background-color: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
 
-.dashboardButton:hover {
-  background-color: #1976D2;
-}
-
-.dashboardContainer {
-  margin-top: 20px;
-  padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
 
 .trainingButton:hover:not(:disabled) {
   background-color: #138496;
@@ -147,6 +122,20 @@
   100% { transform: translateX(100%); }
 }
 
+.trainingContent {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+}
+
+.trainingContent.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .trainingInfo {
   margin-top: 15px;
   padding: 15px;
@@ -172,102 +161,187 @@
   margin-bottom: 5px;
 }
 
-.form { margin-bottom: 20px; }
-.form textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: vertical; min-height: 100px; }
+/* CLI Interface Styles */
+.cliContainer {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+  overflow: hidden;
+}
+
+.cliHeader {
+  background: #2d2d2d;
+  padding: 8px 16px;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cliPrompt {
+  color: #00ff00;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.cliTitle {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cliOutput {
+  padding: 16px;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #1e1e1e;
+}
+
+.cliEntry {
+  margin-bottom: 8px;
+}
+
+.cliEntry:last-child {
+  margin-bottom: 0;
+}
+
+.cliInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cliCommand {
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cliResponse {
+  color: #e0e0e0;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+}
+
+.cliCursor {
+  color: #00ff00;
+  font-weight: bold;
+  font-size: 16px;
+  animation: blink 0.8s infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cliInputContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #2d2d2d;
+  border-top: 1px solid #333;
+}
+
+.cliInputField {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.cliInputField::placeholder {
+  color: #666;
+}
+
+.cliInputField:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+
+/* Scrollbar styling for CLI output */
+.cliOutput::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cliOutput::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.cliOutput::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.cliOutput::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
 
 .buttonContainer {
   display: flex;
   gap: 10px;
   margin-top: 10px;
+  margin-bottom: 16px;
 }
 
-.localSearchButton {
-  flex: 1;
-  padding: 12px 20px;
-  background-color: #28a745;
+.primaryButton,
+.streamButton {
+  background: linear-gradient(135deg, #007bff, #0056b3);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.localSearchButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.localSearchButton:hover:not(:disabled) {
-  background-color: #218838;
-}
-
-.aiAnalysisButton {
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+  position: relative;
+  overflow: hidden;
   flex: 1;
-  padding: 12px 20px;
-  background-color: #0070f3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
 }
 
-.aiAnalysisButton:disabled {
-  background-color: #ccc;
+.primaryButton:hover,
+.streamButton:hover {
+  background: linear-gradient(135deg, #0056b3, #004085);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.streamButton:disabled {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
-.aiAnalysisButton:hover:not(:disabled) {
-  background-color: #0051c3;
+.streamButton {
+  background: linear-gradient(135deg, #28a745, #1e7e34);
 }
 
-.ollamaAnalysisButton {
-  flex: 1;
-  padding: 12px 20px;
-  background-color: #8B5CF6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
+.streamButton:hover {
+  background: linear-gradient(135deg, #1e7e34, #155724);
 }
 
-.ollamaAnalysisButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+.streamButton:disabled {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
 }
 
-.ollamaAnalysisButton:hover:not(:disabled) {
-  background-color: #7C3AED;
-}
 
-.ollamaStreamingButton {
-  flex: 1;
-  padding: 12px 20px;
-  background-color: #10B981;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.ollamaStreamingButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.ollamaStreamingButton:hover:not(:disabled) {
-  background-color: #059669;
-}
 
 .button { padding: 10px 20px; background-color: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 1rem; }
 .button:disabled { background-color: #ccc; cursor: not-allowed; }
