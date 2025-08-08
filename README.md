@@ -1,6 +1,6 @@
 # AI Knowledge Base Analyzer
 
-An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers using local Ollama models. Features a dynamic personality system for customizable AI behavior and real-time knowledge base management.
+An intelligent knowledge base analyzer that uses AI to search through markdown files and provide comprehensive answers using local Ollama models. Features a dynamic personality system for customizable AI behavior, real-time knowledge base management, and advanced model training capabilities.
 
 ## Features
 
@@ -9,89 +9,92 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - Start/stop models on demand
   - Auto-detect trained vs. base models
   - Real-time model status monitoring
+  - Compact dropdown interface for easy model selection
 - **📁 Smart File Inclusion Control**: Choose whether to include knowledge base files in AI responses
   - Toggle knowledge base search on/off
   - General knowledge mode for faster responses
   - Context-aware mode for document-specific queries
 - **🚀 Streaming Responses**: Real-time streaming responses with selected models
+  - Word-by-word streaming like Ollama CLI
+  - Interactive CLI interface in the frontend
+  - Real-time response generation
+- **🎯 Multiple Trained Models**: Train and maintain multiple custom models
+  - Train different base models on your knowledge base
+  - Automatic model versioning with `:latest` tags
+  - Unique Modelfiles and training data for each model
+  - No overwriting - each base model gets its own trained version
+- **💻 Interactive CLI Interface**: Command-line style interface for queries
+  - Type questions and hit Enter for streaming responses
+  - Command history display
+  - Real-time streaming output
+  - Ollama CLI-like experience in the browser
+- **📂 Collapsible Sections**: Clean, organized interface
+  - Collapsible training section
+  - Collapsible query options section
+  - Persistent UI state with localStorage
+  - Focused, clutter-free interface
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
-- **Advanced RAG System**: LlamaIndex integration with vector search and semantic similarity
-- **Hybrid Search**: Combines vector search with traditional keyword search for optimal results
-- **AI-Powered Analysis**: Uses CrewAI for multi-agent analysis of local content
 - **Local AI Processing**: Uses Ollama for local AI model inference
 - **Dynamic Personality System**: Customizable AI behavior through markdown files
 - **Real-time Knowledge Base Management**: Add documents without restarting containers
-- **Feedback System**: Rate responses and improve AI performance over time
 - **Model Training**: Train custom Ollama models on your knowledge base
 - **Folder Structure Support**: Displays folder paths for better organization
 - **Modal Document Viewer**: View full documents with proper overlay
-- **Multi-Step AI Flow**: Guided process for AI analysis with file selection
 
-## 🚀 LlamaIndex Integration
+## 🚀 Model Training System
 
-This project now includes **advanced RAG capabilities** with LlamaIndex integration:
+### Multiple Trained Models
 
-### **Vector Search & Semantic Similarity**
-- **Semantic Search**: Find content based on meaning, not just keywords
-- **Hybrid Search**: Combines vector search with traditional keyword search
-- **ChromaDB Storage**: Persistent vector embeddings with metadata
-- **FAISS Support**: High-performance vector similarity search
+The system now supports training and maintaining multiple custom models:
 
-### **Smart Document Processing**
-- **Intelligent Chunking**: Splits documents based on semantic boundaries
-- **Automatic Indexing**: Builds and maintains vector indexes automatically
-- **Metadata Preservation**: Maintains document structure and relationships
+#### **How It Works:**
+1. **First Training**: Creates a new trained model with unique files
+   - `Modelfile_{safe_model_name}` (e.g., `Modelfile_llama2_latest`)
+   - `ollama_training_{safe_model_name}.jsonl` (e.g., `ollama_training_llama2_latest.jsonl`)
+   - New trained model: `{safe_model_name}-trained` (e.g., `llama2_latest-trained`)
 
-### **Performance Features**
-- **Response Caching**: Caches query results for faster responses
-- **Model Preloading**: Keeps models loaded for optimal performance
-- **Batch Processing**: Efficient handling of large document collections
+2. **Subsequent Training**: Updates existing models with latest data
+   - Detects existing trained model
+   - Updates with `:latest` tag (e.g., `llama2_latest-trained:latest`)
+   - Overwrites existing Modelfile and training data
+   - Shows "Updated" vs "Created" in success messages
 
-### **API Endpoints**
+3. **Multiple Models**: Maintain separate trained models for different base models
+   - `llama2_latest-trained:latest` (updated version)
+   - `llama3.2_3b-trained:latest` (updated version)
+   - Each model has its own training data and configuration
+
+#### **Training Workflow:**
+1. Select a model from the dropdown
+2. Click "🔄 Train Ollama Model" button
+3. System validates model selection
+4. Creates training data from knowledge base
+5. Saves unique Modelfile and training data to `local_models/`
+6. Creates/updates trained model using selected base model
+7. Shows success message with model details
+
+#### **Files Created in `local_models/`:**
+- **`Modelfile_{safe_model_name}`** - Unique Modelfile for each base model
+- **`ollama_training_{safe_model_name}.jsonl`** - Training data for each model
+- **`ollama_training_data.json`** - Combined training data
+
+### Training Commands
+
 ```bash
-# Model Management
-curl http://localhost:5557/models                    # List all available models
-curl http://localhost:5557/models/running            # List running models
-curl -X POST http://localhost:5557/models/select \   # Select a model
+# Train with selected model (requires model selection in frontend)
+curl -X POST http://localhost:5557/train-ollama \
   -H "Content-Type: application/json" \
-  -d '{"model_name": "llama3.2:3b"}'
-curl -X POST http://localhost:5557/models/llama3.2:3b/start  # Start a model
-curl -X POST http://localhost:5557/models/llama3.2:3b/stop   # Stop a model
+  -d '{"action": "train_ollama", "selected_model": "llama2:latest"}'
 
-# New Query with Model Selection
-curl -X POST http://localhost:5557/query-with-model \
+# Train with different base model
+curl -X POST http://localhost:5557/train-ollama \
   -H "Content-Type: application/json" \
-  -d '{"question": "Your question", "include_files": true, "model_name": "llama3.2:3b"}'
-
-# Streaming with Model Selection
-curl -X POST http://localhost:5557/query-with-model-stream \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Your question", "include_files": true}'
-
-# Check LlamaIndex status
-curl http://localhost:5557/llamaindex/status
-
-# Perform hybrid search
-curl -X POST http://localhost:5557/search/hybrid \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is the deployment process?", "search_mode": "hybrid"}'
-
-# Query with full RAG pipeline
-curl -X POST http://localhost:5557/search/llamaindex \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Explain the architecture in detail"}'
-
-# Rebuild vector index
-curl -X POST http://localhost:5557/llamaindex/rebuild \
-  -H "Content-Type: application/json" \
-  -d '{"force_rebuild": true}'
+  -d '{"action": "train_ollama", "selected_model": "llama3.2:3b"}'
 ```
-
-📖 **For detailed LlamaIndex documentation, see [LLAMAINDEX_INTEGRATION.md](LLAMAINDEX_INTEGRATION.md)**
 
 ## 🤖 Model Management System
 
-The AI Knowledge Base Analyzer now includes a comprehensive model management system that allows you to:
+The AI Knowledge Base Analyzer includes a comprehensive model management system that allows you to:
 
 ### **Features**
 - **View Available Models**: See all Ollama models installed on your system with detailed information
@@ -99,6 +102,7 @@ The AI Knowledge Base Analyzer now includes a comprehensive model management sys
 - **Start/Stop Models**: Control which models are loaded in memory for performance optimization
 - **Model Information**: View model size, type (trained vs. base), and running status
 - **File Inclusion Control**: Toggle whether AI responses should include knowledge base files
+- **Compact Dropdown Interface**: Easy model selection with detailed information
 
 ### **Model Types**
 - **Base Models**: Original Ollama models (llama2, llama3.2:3b, mistral, etc.)
@@ -158,6 +162,33 @@ curl -X POST http://localhost:5557/query-with-model-stream \
     "include_files": true
   }'
 ```
+
+## 💻 Interactive CLI Interface
+
+The frontend now features an interactive CLI-style interface:
+
+### **Features:**
+- **Command-Line Style**: Type questions and hit Enter for responses
+- **Real-Time Streaming**: Word-by-word streaming like Ollama CLI
+- **Command History**: View previous questions and responses
+- **Visual Cursor**: Animated cursor for authentic CLI feel
+- **Response Streaming**: See responses generate in real-time
+
+### **Usage:**
+1. Type your question in the CLI input field
+2. Press Enter to submit
+3. Watch the response stream word-by-word
+4. View command history below
+
+## 📂 Collapsible Interface
+
+The interface now includes collapsible sections for better organization:
+
+### **Collapsible Sections:**
+- **Ollama Model Training**: Training controls and information
+- **Query Options**: File inclusion toggle and model info
+- **Persistent State**: UI state saved in localStorage
+- **Clean Interface**: Focus on what matters most
 
 ## 🎭 Personality System
 
@@ -248,58 +279,6 @@ curl -s http://localhost:5557/training/stats
 - **No volume management**: No need for scripts to copy files
 - **Version control friendly**: Files stay in your local git repository
 
-## 🎯 AI Training & Feedback
-
-### Local Model Management
-
-The system now uses Ollama running locally on your machine. Models are stored in your local Ollama directory (`~/.ollama/models` on macOS/Linux) and training data is stored in the `local_models/` directory.
-
-### Training Custom Models
-
-Train Ollama models on your knowledge base and feedback data:
-
-```bash
-# Train the Ollama model on your knowledge base
-curl -X POST http://localhost:5557/train-ollama \
-  -H "Content-Type: application/json" \
-  -d '{"action": "train_ollama"}'
-
-# Train the knowledge base (for search improvements)
-curl -X POST http://localhost:5557/train \
-  -H "Content-Type: application/json" \
-  -d '{"action": "train_knowledge_base"}'
-```
-
-### Feedback System
-
-Rate AI responses to improve performance:
-
-```bash
-# Submit feedback for an AI response
-curl -X POST http://localhost:5557/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_question": "Your question here",
-    "ai_response": "The AI response",
-    "rating": 5,
-    "feedback_type": "thumbs_up",
-    "feedback_text": "Great response!"
-  }'
-```
-
-### Performance Monitoring
-
-```bash
-# Check AI performance stats
-curl -s http://localhost:5557/performance
-
-# Get feedback insights
-curl -s http://localhost:5557/feedback/insights
-
-# View training history
-curl -s http://localhost:5557/training/history
-```
-
 ## 🚀 Quick Start
 
 ### 1. Install Ollama Locally
@@ -338,14 +317,14 @@ chmod +x build_docker.sh
 docker-compose down && docker-compose up -d --build
 ```
 
-### 2. Add Your Knowledge Base
+### 4. Add Your Knowledge Base
 
 ```bash
 # Add your .md files to ./knowledge_base/
 # The system will automatically detect them
 ```
 
-### 3. Customize Personality (Optional)
+### 5. Customize Personality (Optional)
 
 ```bash
 # Edit the personality file
@@ -355,7 +334,14 @@ nano ./knowledge_base/behavior.md
 ./update_personality.sh
 ```
 
-### 4. Access the Application
+### 6. Train Custom Models (Optional)
+
+1. Select a model from the dropdown in the frontend
+2. Click "🔄 Train Ollama Model" button
+3. Wait for training to complete
+4. Use the trained model for better responses
+
+### 7. Access the Application
 
 - **Frontend**: http://localhost:5556
 - **Backend**: http://localhost:5557
@@ -370,14 +356,20 @@ my_ai_project/
 │   ├── README.md
 │   └── your-documents.md
 ├── local_models/            # Local trained models and training data
-│   ├── ollama_training_data.json
-│   ├── feedback_training_data.json
-│   └── Modelfile
+│   ├── Modelfile_llama2_latest          # Modelfile for llama2:latest
+│   ├── Modelfile_llama3.2_3b            # Modelfile for llama3.2:3b
+│   ├── ollama_training_llama2_latest.jsonl
+│   ├── ollama_training_llama3.2_3b.jsonl
+│   └── ollama_training_data.json
 ├── backend/                 # Python Flask server
 │   ├── server.py           # Main server with personality system
 │   ├── ollama_trainer.py   # Model training and management
-│   └── feedback_system.py  # Feedback collection and analysis
+│   ├── model_manager.py    # Model management and selection
+│   └── train_knowledge_base.py  # Knowledge base indexing
 ├── frontend/               # Next.js React application
+│   ├── pages/index.tsx     # Main interface with CLI
+│   ├── components/         # React components
+│   └── styles/            # CSS modules
 ├── docker-compose.yml      # Container orchestration
 ├── update_personality.sh   # Convenience script
 └── init_volume.sh         # Setup verification script
@@ -465,7 +457,7 @@ You are a creative, imaginative AI assistant:
 ### Core Endpoints
 
 ```bash
-# Model Management (NEW)
+# Model Management
 GET /models                           # List all available models
 GET /models/running                   # List running models
 POST /models/select                   # Select a model for queries
@@ -473,13 +465,12 @@ POST /models/{model_name}/start       # Start/load a model
 POST /models/{model_name}/stop        # Stop/unload a model
 GET /models/stats                     # Get model statistics
 
-# New Query Endpoints (NEW)
+# Query Endpoints
 POST /query-with-model                # Query with selected model
 POST /query-with-model-stream         # Stream with selected model
 
-# Main query endpoints (Legacy)
-POST /ask-ollama
-POST /ask
+# Training
+POST /train-ollama                    # Train custom model (requires selected_model)
 
 # Status and monitoring
 GET /status
@@ -491,11 +482,6 @@ POST /personality/reload
 
 # Knowledge base management
 POST /knowledge-base/reload
-
-# Training and feedback
-POST /train-ollama
-POST /train
-POST /feedback
 ```
 
 ### Response Format
@@ -529,6 +515,8 @@ POST /feedback
 4. **Memory issues**: Increase Docker memory limits in `docker-compose.yml`
 5. **Ollama connection issues**: Ensure Ollama is running locally with `ollama serve`
 6. **Model not found**: Pull the base model with `ollama pull llama2`
+7. **Training fails**: Make sure to select a model from the dropdown before training
+8. **Streaming not working**: Check that the selected model is running
 
 ### Debug Commands
 
@@ -553,6 +541,9 @@ curl -s http://localhost:11434/api/tags
 
 # List available Ollama models
 ollama list
+
+# Check trained models
+curl -s http://localhost:5557/models | jq '.models[] | select(.is_trained==true)'
 ```
 
 ## 🤝 Contributing

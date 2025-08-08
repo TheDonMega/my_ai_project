@@ -8,6 +8,8 @@ interface QueryOptionsProps {
   disabled?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  useCrewAI?: boolean;
+  onUseCrewAIChange?: (useCrewAI: boolean) => void;
 }
 
 export default function QueryOptions({ 

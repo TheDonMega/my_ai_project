@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { Answer, Source, FullDocument } from '../types.ts';
 import DocumentModal from '../components/DocumentModal';
 import FormattedAnswer from '../components/FormattedAnswer';
-import FeedbackButton from '../components/FeedbackButton';
+// FeedbackButton removed - not used in current interface
 import ModelSelector from '../components/ModelSelector';
 import QueryOptions from '../components/QueryOptions';
 import styles from '../styles/Home.module.css';
@@ -42,12 +42,7 @@ export default function Home() {
 
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState<string>('');
-  const [feedbackNotification, setFeedbackNotification] = useState<{
-    show: boolean;
-    message: string;
-    type: 'success' | 'info' | 'warning';
-    insights?: string[];
-  } | null>(null);
+  // Feedback notification removed - not used in current interface
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [includeFiles, setIncludeFiles] = useState<boolean>(true);
 
@@ -217,28 +212,40 @@ Ready for your first question!`;
   };
 
   const handleOllamaTraining = async () => {
+    // Check if a model is selected
+    if (!selectedModel) {
+      setTrainingProgress('❌ Please select a model from the dropdown before training.');
+      setTimeout(() => {
+        setTrainingProgress('');
+      }, 3000);
+      return;
+    }
+    
     setIsTraining(true);
-    setTrainingProgress('Starting Ollama model training...');
+    setTrainingProgress(`Starting Ollama model training with ${selectedModel}...`);
     
     try {
-      // Call the Ollama training endpoint
+      // Call the Ollama training endpoint with selected model
       const response = await axios.post('http://localhost:5557/train-ollama', {
-        action: 'train_ollama'
+        action: 'train_ollama',
+        selected_model: selectedModel
       });
       
       if (response.data.success) {
-        setTrainingProgress(`Ollama training completed! Created ${response.data.training_examples} training examples.`);
+        const trainedModelName = response.data.trained_model || `${selectedModel}-trained`;
+        const action = response.data.model_exists ? 'Updated' : 'Created';
+        setTrainingProgress(`✅ Ollama training completed! ${action} ${response.data.training_examples} training examples using ${selectedModel}. Model: ${trainedModelName}`);
         
         // Show success message for a few seconds
         setTimeout(() => {
           setTrainingProgress('');
-        }, 5000);
+        }, 8000);
       } else {
-        setTrainingProgress('Ollama training failed: ' + (response.data.error || 'Unknown error'));
+        setTrainingProgress('❌ Ollama training failed: ' + (response.data.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Ollama training error:', error);
-      setTrainingProgress('Ollama training failed: ' + (error as any).message);
+      setTrainingProgress('❌ Ollama training failed: ' + (error as any).message);
     } finally {
       setTimeout(() => {
         setIsTraining(false);
@@ -251,39 +258,7 @@ Ready for your first question!`;
     <div className={styles.container}>
       <h1>AI Knowledge Base Assistant</h1>
       
-      {/* Feedback Notification */}
-      {feedbackNotification && feedbackNotification.show && (
-        <div className={`mb-4 p-4 rounded-lg border ${
-          feedbackNotification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-          feedbackNotification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
-          'bg-blue-50 border-blue-200 text-blue-800'
-        }`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-medium mb-2">{feedbackNotification.message}</h3>
-              {feedbackNotification.insights && feedbackNotification.insights.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-sm font-medium mb-2">How the system will learn:</p>
-                  <ul className="space-y-1">
-                    {feedbackNotification.insights.map((insight, index) => (
-                      <li key={index} className="text-sm flex items-start">
-                        <span className="mr-2">•</span>
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setFeedbackNotification(null)}
-              className="ml-4 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Feedback notification removed - not used in current interface */}
       
 
       
@@ -328,12 +303,13 @@ Ready for your first question!`;
               )}
               
               <div className={styles.trainingInfo}>
-                <p>Train Ollama to better understand your knowledge base and feedback:</p>
+                <p>Train Ollama to better understand your knowledge base:</p>
                 <ul>
                   <li>🧠 Improves response quality and accuracy</li>
-                  <li>📊 Learns from feedback patterns</li>
                   <li>🎯 Adapts to your knowledge base content</li>
                   <li>⚡ Creates optimized training examples</li>
+                  <li>📁 Saves Modelfile and training data to local_models/</li>
+                  <li>⚠️ <strong>Select a model from the dropdown below before training</strong></li>
                 </ul>
               </div>
             </div>

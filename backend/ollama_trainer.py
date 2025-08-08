@@ -209,57 +209,8 @@ class OllamaTrainer:
         return questions[:5]  # Limit to 5 questions per section
     
     def create_training_data_from_feedback(self) -> List[Dict[str, Any]]:
-        """Create training data from user feedback"""
-        training_data = []
-        
-        try:
-            from feedback_system import feedback_system
-            feedback_data = feedback_system.get_all_feedback()
-            
-            if not feedback_data or not feedback_data.get('feedback_entries'):
-                return training_data
-            
-            print("📝 Creating training data from feedback...")
-            
-            for entry in feedback_data['feedback_entries']:
-                rating = entry.get('rating', 0)
-                feedback_text = entry.get('feedback_text', '').lower()
-                
-                # Only use high-rated responses (4-5 stars) as positive examples
-                if rating >= 4:
-                    training_data.append({
-                        "instruction": entry['user_question'],
-                        "input": "",
-                        "output": entry['ai_response'],
-                        "context": {
-                            "rating": rating,
-                            "feedback_type": entry.get('feedback_type', ''),
-                            "source": "user_feedback"
-                        }
-                    })
-                
-                # Use feedback text to create improvement examples
-                if feedback_text and rating <= 2:
-                    improved_response = self.generate_improved_response(entry['ai_response'], feedback_text)
-                    if improved_response:
-                        training_data.append({
-                            "instruction": entry['user_question'],
-                            "input": "",
-                            "output": improved_response,
-                            "context": {
-                                "rating": rating,
-                                "feedback_type": entry.get('feedback_type', ''),
-                                "improvement": feedback_text,
-                                "source": "feedback_improvement"
-                            }
-                        })
-            
-            print(f"✅ Created {len(training_data)} training examples from feedback")
-            
-        except Exception as e:
-            print(f"❌ Error creating feedback training data: {e}")
-        
-        return training_data
+        """Create training data from user feedback - removed, not used in current interface"""
+        return []
     
     def generate_improved_response(self, original_response: str, feedback_text: str) -> Optional[str]:
         """Generate an improved response based on feedback"""
@@ -310,7 +261,11 @@ class OllamaTrainer:
         return []
     
     def train_ollama_model(self, training_data: List[Dict[str, Any]]) -> bool:
-        """Train the Ollama model with the provided training data"""
+        """Train the Ollama model with the provided training data (legacy)"""
+        return self.train_ollama_model_with_base(training_data, "llama2")
+    
+    def train_ollama_model_with_base(self, training_data: List[Dict[str, Any]], base_model: str) -> bool:
+        """Train the Ollama model with the provided training data and base model"""
         if not self.check_ollama_status():
             print("❌ Ollama is not running or accessible")
             return False
@@ -319,14 +274,22 @@ class OllamaTrainer:
             print("❌ No training data provided")
             return False
         
-        print(f"🚀 Starting Ollama training with {len(training_data)} examples...")
+        print(f"🚀 Starting Ollama training with {len(training_data)} examples using base model: {base_model}")
         
         try:
-            # Create a custom model name
-            custom_model_name = f"{self.model_name}-trained"
+            # Check if this model has been trained before
+            available_models = self.get_available_models()
+            # Create safe model name without colons
+            safe_base_model = base_model.replace(':', '_')
+            custom_model_name = f"{safe_base_model}-trained"
+            model_exists = custom_model_name in available_models
             
-            # Use llama2 as the base model for training (since "ollama" is not a real model)
-            base_model = "llama2"
+            if model_exists:
+                print(f"🔄 Model {custom_model_name} already exists. Updating with latest training data...")
+                # Use :latest tag to update existing model
+                custom_model_name = f"{custom_model_name}:latest"
+            else:
+                print(f"🆕 Creating new trained model: {custom_model_name}")
             
             # Prepare training data in Ollama format
             ollama_training_data = []
@@ -338,8 +301,13 @@ class OllamaTrainer:
                     "output": example["output"]
                 })
             
-            # Save training data for Ollama in the correct format
-            training_file = "/app/local_models/ollama_training.jsonl"
+            # Ensure local_models directory exists
+            local_models_dir = "/app/local_models"
+            os.makedirs(local_models_dir, exist_ok=True)
+            
+            # Create unique training data file for this base model
+            safe_base_model = base_model.replace(':', '_').replace('/', '_')
+            training_file = os.path.join(local_models_dir, f"ollama_training_{safe_base_model}.jsonl")
             with open(training_file, 'w', encoding='utf-8') as f:
                 for item in ollama_training_data:
                     # Use the exact format Ollama expects
@@ -366,19 +334,24 @@ PARAMETER stop "Assistant:"
 TRAIN {training_file}
 """
             
-            modelfile_path = "/app/local_models/Modelfile"
+            # Create unique Modelfile for this base model
+            modelfile_path = os.path.join(local_models_dir, f"Modelfile_{safe_base_model}")
             with open(modelfile_path, 'w', encoding='utf-8') as f:
                 f.write(modelfile_content)
             
             print(f"✅ Modelfile created: {modelfile_path}")
+            print(f"📄 Modelfile content preview:")
+            print("=" * 50)
+            print(modelfile_content)
+            print("=" * 50)
             
             # Create the fine-tuned model using Ollama create command
             print(f"🔧 Creating fine-tuned model: {custom_model_name}")
             
-            # Use requests to call Ollama create API with from parameter
+            # Use requests to call Ollama create API with modelfile parameter
             create_response = requests.post(f"{self.ollama_url}/api/create", json={
                 "name": custom_model_name,
-                "from": base_model
+                "modelfile": modelfile_content
             })
             
             # Check both status code and response content
@@ -646,8 +619,12 @@ Please provide a helpful response based on the context provided. If the context 
             yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
     
     def train(self, knowledge_base_path: str = "/app/knowledge_base") -> Dict[str, Any]:
-        """Main training function"""
-        print("🚀 Starting Ollama training process...")
+        """Main training function (legacy - use train_with_model instead)"""
+        return self.train_with_model(self.model_name, knowledge_base_path)
+    
+    def train_with_model(self, base_model: str, knowledge_base_path: str = "/app/knowledge_base") -> Dict[str, Any]:
+        """Train Ollama model with specified base model"""
+        print(f"🚀 Starting Ollama training process with base model: {base_model}")
         
         start_time = time.time()
         
@@ -659,34 +636,43 @@ Please provide a helpful response based on the context provided. If the context 
                     "error": "Ollama is not running or accessible"
                 }
             
+            # Verify the base model exists
+            available_models = self.get_available_models()
+            if base_model not in available_models:
+                return {
+                    "success": False,
+                    "error": f"Base model '{base_model}' not found. Available models: {', '.join(available_models[:5])}"
+                }
+            
+            # Check if this model has been trained before
+            safe_base_model = base_model.replace(':', '_')
+            custom_model_name = f"{safe_base_model}-trained"
+            model_exists = custom_model_name in available_models
+            
             # Create training data from knowledge base
             kb_training_data = self.create_training_data_from_knowledge_base(knowledge_base_path)
             
-            # Create training data from feedback
-            feedback_training_data = self.create_training_data_from_feedback()
-            
-            # Combine training data
-            all_training_data = kb_training_data + feedback_training_data
-            
-            if not all_training_data:
+            if not kb_training_data:
                 return {
                     "success": False,
-                    "error": "No training data could be created"
+                    "error": "No training data could be created from knowledge base"
                 }
             
             # Save training data
-            self.save_training_data(all_training_data, self.training_data_file)
+            self.save_training_data(kb_training_data, self.training_data_file)
             
-            # Train the model
-            training_success = self.train_ollama_model(all_training_data)
+            # Train the model with specified base model
+            training_success = self.train_ollama_model_with_base(kb_training_data, base_model)
             
             duration = time.time() - start_time
             
             return {
                 "success": training_success,
-                "training_examples": len(all_training_data),
+                "training_examples": len(kb_training_data),
                 "kb_examples": len(kb_training_data),
-                "feedback_examples": len(feedback_training_data),
+                "trained_model_name": custom_model_name,
+                "base_model": base_model,
+                "model_exists": model_exists,
                 "duration": duration,
                 "model_available": self.check_ollama_status()
             }

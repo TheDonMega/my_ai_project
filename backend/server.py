@@ -5,23 +5,11 @@ from dotenv import load_dotenv
 from datetime import datetime
 import time # Added for fast_llamaindex_query
 
-# Import CrewAI analyzer
-try:
-    from crewai_analyzer import get_crewai_analyzer
-    CREWAI_AVAILABLE = True
-    print("✅ CrewAI integration available")
-except ImportError as e:
-    CREWAI_AVAILABLE = False
-    print(f"⚠️  CrewAI not available: {e}")
+# CrewAI removed - using ModelManager instead
+CREWAI_AVAILABLE = False
 
-# Import feedback system
-try:
-    from feedback_system import save_user_feedback, get_feedback_insights
-    FEEDBACK_AVAILABLE = True
-    print("✅ Feedback system available")
-except ImportError as e:
-    FEEDBACK_AVAILABLE = False
-    print(f"⚠️  Feedback system not available: {e}")
+# Feedback system removed - not used in current interface
+FEEDBACK_AVAILABLE = False
 
 # Import Ollama trainer
 try:
@@ -41,14 +29,8 @@ except ImportError as e:
     MODEL_MANAGER_AVAILABLE = False
     print(f"⚠️  Model manager not available: {e}")
 
-# Import LlamaIndex hybrid search system
-try:
-    import hybrid_search
-    HYBRID_SEARCH_AVAILABLE = True
-    print("✅ Hybrid search system available")
-except ImportError as e:
-    HYBRID_SEARCH_AVAILABLE = False
-    print(f"⚠️  Hybrid search system not available: {e}")
+# Hybrid search system removed - not used in current interface
+HYBRID_SEARCH_AVAILABLE = False
 
 # Global variables for performance optimization
 OLLAMA_AVAILABLE = False
@@ -117,30 +99,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Ollama trainer not available: {e}")
 
-# Initialize Hybrid Search System on startup
-try:
-    if HYBRID_SEARCH_AVAILABLE:
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        embedding_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-        llm_model = os.getenv("LLM_MODEL", "llama3.2:3b")
-        use_chroma = os.getenv("USE_CHROMA", "true").lower() == "true"
-        hybrid_weight = float(os.getenv("HYBRID_WEIGHT", "0.7"))
-        
-        HYBRID_SEARCH_SYSTEM = hybrid_search.HybridSearchSystem(
-            knowledge_base_path="/app/knowledge_base",
-            vector_store_path="/app/vector_store",
-            ollama_base_url=ollama_url,
-            embedding_model=embedding_model,
-            llm_model=llm_model,
-            use_chroma=use_chroma,
-            hybrid_weight=hybrid_weight
-        )
-        print("✅ Hybrid search system initialized")
-    else:
-        print("⚠️ Hybrid search system not available")
-except Exception as e:
-    print(f"⚠️ Error initializing hybrid search system: {e}")
-    HYBRID_SEARCH_SYSTEM = None
+# Hybrid search system removed - not used in current interface
+HYBRID_SEARCH_SYSTEM = None
 
 # Load personality prompt on startup
 load_personality_prompt()
@@ -226,8 +186,7 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
     query_words = set(query.lower().split())
     results = []
     
-    # Load feedback learning data for enhanced search
-    feedback_enhancement = load_feedback_enhancement()
+    # Feedback enhancement removed - not used in current interface
     
     for doc in knowledge_base:
         # Extract folder path from filename (everything before the last '/')
@@ -268,9 +227,7 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
             # Add filename/folder match score
             score += filename_match_score
             
-            # Apply feedback-based enhancements
-            if feedback_enhancement:
-                score = apply_feedback_enhancement(score, query, section, feedback_enhancement)
+            # Feedback enhancement removed - not used in current interface
             
             # Only include sections with matches (including filename matches)
             if score > 0:
@@ -287,63 +244,7 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
     results.sort(key=lambda x: x['score'], reverse=True)
     return results[:num_results]
 
-def load_feedback_enhancement():
-    """Load feedback learning data for search enhancement"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        trainer = KnowledgeBaseTrainer()
-        learning_data = trainer.load_feedback_learning_data()
-        return learning_data.get('feedback_patterns', {})
-    except Exception as e:
-        print(f"⚠️  Error loading feedback enhancement: {e}")
-        return {}
-
-def apply_feedback_enhancement(score, query, section, feedback_patterns):
-    """Apply feedback-based enhancements to search scores"""
-    enhanced_score = score
-    
-    # Get query type for pattern matching
-    query_lower = query.lower()
-    query_type = categorize_query(query_lower)
-    
-    # Check if this query type has successful patterns
-    successful_patterns = feedback_patterns.get('successful_patterns', [])
-    for pattern in successful_patterns:
-        if pattern.get('query_type') == query_type:
-            # Boost score for queries that match successful patterns
-            enhanced_score += 1
-    
-    # Check for common issues to avoid
-    common_issues = feedback_patterns.get('common_issues', [])
-    if 'irrelevant_response' in common_issues:
-        # Be more strict with relevance scoring
-        if enhanced_score < 2:
-            enhanced_score *= 0.5
-    
-    # Check query improvements
-    query_improvements = feedback_patterns.get('query_improvements', {})
-    if query_lower in query_improvements:
-        # Apply specific improvements for this query
-        improvements = query_improvements[query_lower].get('suggested_improvements', [])
-        if 'add_more_details' in improvements:
-            # Boost sections with more detailed content
-            if len(section['content']) > 200:
-                enhanced_score += 1
-    
-    return enhanced_score
-
-def categorize_query(query):
-    """Categorize query type for pattern matching"""
-    if any(word in query for word in ['how', 'what', 'why', 'when', 'where']):
-        return 'question'
-    elif any(word in query for word in ['explain', 'describe', 'tell me about']):
-        return 'explanation'
-    elif any(word in query for word in ['find', 'search', 'look for']):
-        return 'search'
-    elif any(word in query for word in ['compare', 'difference', 'vs']):
-        return 'comparison'
-    else:
-        return 'general'
+# Feedback enhancement functions removed - not used in current interface
 
 # --- 3. Query Ollama with Context ---
 def ask_ollama_with_context(query, context_documents):
@@ -450,21 +351,12 @@ def status():
         'status': 'running',
         'documents_loaded': reload_knowledge_base(),
         'knowledge_base_documents': len(kb),
-        'crewai_available': CREWAI_AVAILABLE,
+
         'ollama_available': OLLAMA_AVAILABLE,
         'feedback_available': FEEDBACK_AVAILABLE,
         'personality_loaded': bool(PERSONALITY_PROMPT),
-        'model_preloaded': MODEL_PRELOADED,
-        'hybrid_search_available': HYBRID_SEARCH_AVAILABLE
+        'model_preloaded': MODEL_PRELOADED
     }
-    
-    # Add LlamaIndex status if available
-    if HYBRID_SEARCH_SYSTEM:
-        llamaindex_stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
-        status_data.update({
-            'llamaindex_available': llamaindex_stats['llamaindex_available'],
-            'llamaindex_stats': llamaindex_stats
-        })
     
     return jsonify(status_data)
 
@@ -489,59 +381,15 @@ def ask():
         method = data.get('method', 'ai_analysis')
         
         if method == 'ai_analysis':
-            # Use CrewAI for AI analysis
-            if CREWAI_AVAILABLE:
-                try:
-                    print("🤖 Using CrewAI for local knowledge base analysis...")
-                    # Use the correct knowledge base path for Docker container
-                    crewai_analyzer = get_crewai_analyzer("/app/knowledge_base")
-                    crewai_result = crewai_analyzer.analyze_query(user_question)
-                    
-                    if crewai_result and crewai_result.get('answer'):
-                        steps.append("CrewAI multi-agent analysis completed")
-                        return jsonify({
-                            'answer': crewai_result['answer'],
-                            'sources': crewai_result.get('sources', []),
-                            'next_step': None,  # No further steps for AI analysis
-                            'steps': steps,
-                            'method': crewai_result.get('method', 'crewai')
-                        })
-                    else:
-                        print("⚠️  CrewAI returned no results, falling back to hybrid search")
-                except Exception as e:
-                    print(f"⚠️  CrewAI analysis failed: {e}, falling back to hybrid search")
+            # AI analysis method removed - use /query-with-model-stream instead
+            return jsonify({
+                'error': 'AI analysis method is deprecated. Please use the new CLI interface with /query-with-model-stream endpoint.',
+                'method': 'deprecated'
+            }), 400
             
-            # Use hybrid search if available, otherwise fallback to simple search
-            if HYBRID_SEARCH_SYSTEM and HYBRID_SEARCH_SYSTEM.llamaindex_available:
-                print("🔍 Using Hybrid Search System")
-                search_results = HYBRID_SEARCH_SYSTEM.search(
-                    query=user_question,
-                    knowledge_base=kb,
-                    search_mode='hybrid',
-                    num_results=5,
-                    similarity_threshold=0.6
-                )
-                
-                if search_results['results']:
-                    relevant_docs = []
-                    for result in search_results['results']:
-                        relevant_docs.append({
-                            'section': result['content'],
-                            'filename': result['filename'],
-                            'score': result['score'],
-                            'relevance': result.get('relevance', result['score']),
-                            'folder_path': result.get('folder_path', ''),
-                            'header': result.get('header', ''),
-                            'source_type': result.get('source_type', 'hybrid')
-                        })
-                    steps.append(f"Hybrid search found {len(relevant_docs)} relevant sections")
-                else:
-                    print("❌ No relevant content found with hybrid search, falling back to keyword search")
-                    relevant_docs = search_knowledge_base(user_question, kb)
-                    steps.append("Falling back to keyword search")
-            else:
-                print("🔍 Using Traditional Keyword Search")
-                relevant_docs = search_knowledge_base(user_question, kb)
+            # Use traditional keyword search
+            print("🔍 Using Traditional Keyword Search")
+            relevant_docs = search_knowledge_base(user_question, kb)
             
             if not relevant_docs:
                 steps.append("No relevant documents found in knowledge base.")
@@ -758,131 +606,7 @@ def get_document(filename):
     except Exception as e:
         return jsonify({'error': f'Error reading document: {str(e)}'}), 500
 
-@app.route('/feedback', methods=['POST'])
-def submit_feedback():
-    """Submit user feedback for an AI response"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No feedback data provided'}), 400
-        
-        required_fields = ['user_question', 'ai_response', 'rating', 'feedback_type']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Validate rating
-        rating = data['rating']
-        if not isinstance(rating, int) or rating < 1 or rating > 5:
-            return jsonify({'error': 'Rating must be an integer between 1 and 5'}), 400
-        
-        # Validate feedback type
-        feedback_type = data['feedback_type']
-        if feedback_type not in ['thumbs_up', 'thumbs_down', 'neutral']:
-            return jsonify({'error': 'Invalid feedback type'}), 400
-        
-        # Save feedback
-        success = save_user_feedback(
-            user_question=data['user_question'],
-            ai_response=data['ai_response'],
-            rating=rating,
-            feedback_type=feedback_type,
-            feedback_text=data.get('feedback_text', ''),
-            search_method=data.get('search_method', 'unknown'),
-            sources_used=data.get('sources_used', []),
-            relevance_score=data.get('relevance_score', 0.0),
-            user_session_id=data.get('user_session_id', '')
-        )
-        
-        if success:
-            # Generate learning insights based on the feedback
-            learning_insights = generate_feedback_insights(rating, feedback_type, data.get('feedback_text', ''))
-            
-            return jsonify({
-                'success': True,
-                'message': 'Feedback submitted successfully',
-                'rating': rating,
-                'feedback_type': feedback_type,
-                'learning_insights': learning_insights,
-                'will_improve': True,
-                'next_steps': [
-                    'Your feedback has been saved for learning',
-                    'The system will analyze patterns from your feedback',
-                    'Future responses will be improved based on your input',
-                    'You can retrain the system to apply changes immediately'
-                ]
-            })
-        else:
-            return jsonify({'error': 'Failed to save feedback'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': f'Error submitting feedback: {str(e)}'}), 500
-
-def generate_feedback_insights(rating: int, feedback_type: str, feedback_text: str) -> list:
-    """Generate learning insights based on feedback"""
-    insights = []
-    
-    # Rating-based insights
-    if rating >= 4:
-        insights.append("✅ This response pattern will be reinforced for similar queries")
-        insights.append("🎯 Future searches will prioritize this type of content")
-    elif rating <= 2:
-        insights.append("🔍 The system will avoid similar response patterns")
-        insights.append("📈 Search relevance will be adjusted for better results")
-    
-    # Feedback text analysis
-    feedback_lower = feedback_text.lower()
-    
-    if 'more detail' in feedback_lower or 'incomplete' in feedback_lower:
-        insights.append("📝 Future responses will include more comprehensive information")
-    
-    if 'irrelevant' in feedback_lower or 'not helpful' in feedback_lower:
-        insights.append("🎯 Search relevance thresholds will be improved")
-    
-    if 'confusing' in feedback_lower or 'unclear' in feedback_lower:
-        insights.append("💡 Response clarity and structure will be enhanced")
-    
-    if 'too long' in feedback_lower or 'verbose' in feedback_lower:
-        insights.append("✂️ Future responses will be more concise")
-    
-    if 'examples' in feedback_lower or 'specific' in feedback_lower:
-        insights.append("📋 Responses will include more specific examples")
-    
-    if 'wrong' in feedback_lower or 'incorrect' in feedback_lower:
-        insights.append("🔍 Information accuracy will be improved")
-    
-    if 'structure' in feedback_lower or 'organize' in feedback_lower:
-        insights.append("📊 Response organization will be enhanced")
-    
-    return insights
-
-@app.route('/feedback/insights', methods=['GET'])
-def get_feedback_insights_endpoint():
-    """Get insights from feedback data"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        insights = get_feedback_insights()
-        return jsonify(insights)
-    except Exception as e:
-        return jsonify({'error': f'Error getting insights: {str(e)}'}), 500
-
-@app.route('/feedback/stats', methods=['GET'])
-def get_feedback_stats():
-    """Get feedback statistics"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        from feedback_system import feedback_system
-        stats = feedback_system.get_feedback_stats()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': f'Error getting stats: {str(e)}'}), 500
+# Feedback endpoints removed - not used in current interface
 
 
 
@@ -1058,7 +782,7 @@ def ask_ollama_stream():
 
 @app.route('/train-ollama', methods=['POST'])
 def train_ollama():
-    """Train Ollama model on knowledge base and feedback"""
+    """Train Ollama model on knowledge base using selected model"""
     if not OLLAMA_AVAILABLE:
         return jsonify({
             'error': 'Ollama trainer not available'
@@ -1069,20 +793,29 @@ def train_ollama():
         if not data or data.get('action') != 'train_ollama':
             return jsonify({'error': 'Invalid training action'}), 400
         
-        # Initialize Ollama trainer
+        # Get selected model from request
+        selected_model = data.get('selected_model')
+        if not selected_model:
+            return jsonify({
+                'success': False,
+                'error': 'No model selected. Please select a model from the dropdown before training.'
+            }), 400
+        
+        # Initialize Ollama trainer with selected model
         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         ollama_trainer = OllamaTrainer(ollama_url)
         
-        # Train the model
-        result = ollama_trainer.train()
+        # Train the model with selected base model
+        result = ollama_trainer.train_with_model(selected_model)
         
         if result['success']:
             return jsonify({
                 'success': True,
-                'message': 'Ollama model training completed successfully',
+                'message': f'Ollama model training completed successfully using {selected_model}',
+                'base_model': selected_model,
+                'trained_model': result.get('trained_model_name', f'{selected_model}-trained'),
                 'training_examples': result.get('training_examples', 0),
                 'kb_examples': result.get('kb_examples', 0),
-                'feedback_examples': result.get('feedback_examples', 0),
                 'duration': result.get('duration', 0),
                 'training_time': datetime.now().isoformat()
             })
@@ -1156,386 +889,7 @@ def reload_knowledge_base_endpoint():
             'error': f'Failed to reload knowledge base: {str(e)}'
         }), 500
 
-# --- LlamaIndex and Hybrid Search Endpoints ---
-
-@app.route('/llamaindex/status', methods=['GET'])
-def llamaindex_status():
-    """Get LlamaIndex system status"""
-    try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
-        return jsonify({
-            'success': True,
-            'llamaindex_available': stats['llamaindex_available'],
-            'stats': stats
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/rebuild', methods=['POST'])
-def rebuild_llamaindex():
-    """Rebuild LlamaIndex"""
-    try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        data = request.get_json() or {}
-        force_rebuild = data.get('force_rebuild', True)
-        
-        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
-        
-        return jsonify({
-            'success': True,
-            'result': result
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/search/hybrid', methods=['POST'])
-def hybrid_search():
-    """Perform hybrid search using LlamaIndex and keyword search"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        search_mode = data.get('search_mode', 'hybrid')  # hybrid, llamaindex, keyword, fallback
-        num_results = data.get('num_results', 5)
-        similarity_threshold = data.get('similarity_threshold', 0.6)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        # Perform hybrid search
-        search_results = HYBRID_SEARCH_SYSTEM.search(
-            query=query,
-            knowledge_base=kb,
-            search_mode=search_mode,
-            num_results=num_results,
-            similarity_threshold=similarity_threshold
-        )
-        
-        return jsonify({
-            'success': True,
-            'search_results': search_results
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/search/llamaindex', methods=['POST'])
-def llamaindex_query():
-    """Query using LlamaIndex RAG pipeline"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        use_cache = data.get('use_cache', True)
-        similarity_threshold = data.get('similarity_threshold', 0.7)
-        top_k = data.get('top_k', 5)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        # Query using LlamaIndex
-        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
-            query=query,
-            use_cache=use_cache,
-            similarity_threshold=similarity_threshold,
-            top_k=top_k
-        )
-        
-        return jsonify({
-            'success': True,
-            'result': result
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/search/stats', methods=['GET'])
-def get_search_stats():
-    """Get search system statistics"""
-    try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
-        return jsonify({
-            'success': True,
-            'stats': stats
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/query', methods=['POST'])
-def pure_llamaindex_query():
-    """Pure LlamaIndex query - fast RAG with your knowledge base"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        use_cache = data.get('use_cache', True)
-        similarity_threshold = data.get('similarity_threshold', 0.5)  # Lower threshold for more results
-        top_k = data.get('top_k', 8)  # More results for better coverage
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
-        
-        # Query using pure LlamaIndex
-        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
-            query=query,
-            use_cache=use_cache,
-            similarity_threshold=similarity_threshold,
-            top_k=top_k
-        )
-        
-        if not result['success']:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Query failed')
-            }), 500
-        
-        # Format the response for better readability
-        response = {
-            'success': True,
-            'query': query,
-            'answer': result['response'],
-            'sources': [],
-            'query_time': result['query_time'],
-            'total_sources_found': result['total_sources'],
-            'sources_used': result['filtered_sources']
-        }
-        
-        # Format sources with file information
-        for source in result['sources']:
-            formatted_source = {
-                'content': source['content'][:300] + '...' if len(source['content']) > 300 else source['content'],
-                'filename': source['filename'],
-                'relevance_score': round(source['score'], 3),
-                'file_path': source['filename']
-            }
-            response['sources'].append(formatted_source)
-        
-        return jsonify(response)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/fast-query', methods=['POST'])
-def fast_llamaindex_query():
-    """Fast LlamaIndex query - returns retrieved documents without LLM response generation"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        top_k = data.get('top_k', 8)
-        similarity_threshold = data.get('similarity_threshold', 0.0)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
-        
-        start_time = time.time()
-        
-        # Get similar documents directly
-        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
-            query=query,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold
-        )
-        
-        query_time = time.time() - start_time
-        
-        # Format the response
-        response = {
-            'success': True,
-            'query': query,
-            'query_time': query_time,
-            'documents_found': len(similar_docs),
-            'answer': f"Found {len(similar_docs)} relevant documents from your knowledge base.",
-            'sources': []
-        }
-        
-        # Format sources with file information
-        for doc in similar_docs:
-            formatted_source = {
-                'content': doc['content'][:500] + '...' if len(doc['content']) > 500 else doc['content'],
-                'filename': doc['filename'],
-                'relevance_score': round(doc['score'], 6),
-                'file_path': doc['filename'],
-                'full_content': doc['content']  # Include full content for reference
-            }
-            response['sources'].append(formatted_source)
-        
-        return jsonify(response)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/train', methods=['POST'])
-def train_llamaindex():
-    """Train/rebuild LlamaIndex on your knowledge base"""
-    try:
-        data = request.get_json() or {}
-        force_rebuild = data.get('force_rebuild', True)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Rebuild the index
-        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
-        
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'message': 'LlamaIndex trained successfully!',
-                'stats': {
-                    'documents_processed': result['documents_processed'],
-                    'chunks_created': result['chunks_created'],
-                    'training_time': round(result['indexing_time'], 2),
-                    'index_size_mb': result.get('index_size_mb', 0)
-                }
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Training failed')
-            }), 500
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/debug', methods=['POST'])
-def debug_llamaindex():
-    """Debug endpoint to test document retrieval without LLM response"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        top_k = data.get('top_k', 10)
-        similarity_threshold = data.get('similarity_threshold', 0.0)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
-        
-        # Get similar documents directly
-        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
-            query=query,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold
-        )
-        
-        return jsonify({
-            'success': True,
-            'query': query,
-            'documents_found': len(similar_docs),
-            'documents': similar_docs
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+# LlamaIndex and Hybrid Search endpoints removed - not used in current interface
 
 # --- Model Management Endpoints ---
 
@@ -1886,6 +1240,8 @@ def query_with_model_stream():
             yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
     
     return Response(generate(), mimetype='text/plain')
+
+
 
 if __name__ == "__main__":
     # Initialize knowledge base at startup
