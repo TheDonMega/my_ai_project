@@ -239,7 +239,7 @@ Ready for your first question!`;
               }
               
               // Capture sources from the first metadata message
-              if (data.sources && data.model_used && !currentSources.length) {
+              if (data.sources && data.model_used) {
                 console.log('Sources data received:', data.sources);
                 console.log('Sources filenames:', data.sources.map((s: any) => s.filename));
                 setCurrentSources(data.sources);
