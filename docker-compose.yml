@@ -9,6 +9,7 @@ services:
       - "5557:5557"
     volumes:
       - ${PWD:-.}/knowledge_base:/app/knowledge_base
+      - ${PWD:-.}/behavior_model:/app/behavior_model
       - ${PWD:-.}/vector_store:/app/vector_store
       - ${PWD:-.}/local_models:/app/local_models
     environment:

@@ -40,18 +40,18 @@ MODEL_PRELOADED = False
 PERSONALITY_PROMPT = ""
 kb = []  # Global knowledge base variable
 
-def load_personality_prompt():
-    """Load personality/behavior prompt from behavior.md file"""
+def load_personality_prompt(behavior_filename: str = "behavior.md"):
+    """Load personality/behavior prompt from specified behavior file"""
     global PERSONALITY_PROMPT
     
     try:
-        behavior_file = "/app/knowledge_base/behavior.md"
+        behavior_file = f"/app/behavior_model/{behavior_filename}"
         if os.path.exists(behavior_file):
             with open(behavior_file, 'r', encoding='utf-8') as f:
                 PERSONALITY_PROMPT = f.read().strip()
-                print(f"✅ Loaded personality prompt from behavior.md ({len(PERSONALITY_PROMPT)} characters)")
+                print(f"✅ Loaded personality prompt from {behavior_filename} ({len(PERSONALITY_PROMPT)} characters)")
         else:
-            print("⚠️ No behavior.md file found. Using default personality.")
+            print(f"⚠️ No {behavior_filename} file found. Using default personality.")
             PERSONALITY_PROMPT = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
     except Exception as e:
         print(f"❌ Error loading personality prompt: {e}")
@@ -151,7 +151,7 @@ def reload_knowledge_base():
     return len(kb)
 
 # --- 2. Search for Relevant Context ---
-def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased default results
+def search_knowledge_base(query, knowledge_base, num_results=5):  # Increased to 5 results for better coverage
     """
     Search for relevant sections in markdown files and extract the most relevant paragraphs.
     """
@@ -202,9 +202,13 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
         # High score for filename/folder matches
         filename_match_score = 0
         if any(word in filename_lower for word in query_words):
-            filename_match_score = 10  # High priority for filename matches
+            filename_match_score = 15  # Higher priority for filename matches
         if any(word in folder_lower for word in query_words):
-            filename_match_score = 8   # High priority for folder matches
+            filename_match_score = 12   # Higher priority for folder matches
+        
+        # Extra bonus for exact folder name matches (like "QA" folder)
+        if query_lower in folder_lower or folder_lower in query_lower:
+            filename_match_score += 10  # Significant bonus for exact folder matches
         
         sections = split_into_sections(doc['content'])
         
@@ -222,7 +226,11 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
             # Score calculation: words found + bonus for header matches
             score = len(common_words)
             if any(word in section['header'].lower() for word in query_words):
-                score += 2  # Bonus points for header matches
+                score += 5  # Higher bonus points for header matches
+            
+            # Bonus for content length (more detailed content gets higher score)
+            content_length_bonus = min(len(content.split()) / 100, 3)  # Max 3 points for long content
+            score += content_length_bonus
             
             # Add filename/folder match score
             score += filename_match_score
@@ -782,7 +790,7 @@ def ask_ollama_stream():
 
 @app.route('/train-ollama', methods=['POST'])
 def train_ollama():
-    """Train Ollama model on knowledge base using selected model"""
+    """Train Ollama model on selected knowledge base files with custom naming"""
     if not OLLAMA_AVAILABLE:
         return jsonify({
             'error': 'Ollama trainer not available'
@@ -793,7 +801,7 @@ def train_ollama():
         if not data or data.get('action') != 'train_ollama':
             return jsonify({'error': 'Invalid training action'}), 400
         
-        # Get selected model from request
+        # Get required parameters
         selected_model = data.get('selected_model')
         if not selected_model:
             return jsonify({
@@ -801,19 +809,53 @@ def train_ollama():
                 'error': 'No model selected. Please select a model from the dropdown before training.'
             }), 400
         
-        # Initialize Ollama trainer with selected model
+        # Get selected files/folders for training
+        selected_files = data.get('selected_files', [])
+        if not selected_files:
+            return jsonify({
+                'success': False,
+                'error': 'No files selected for training. Please select at least one file or folder.'
+            }), 400
+        
+        # Get custom model name suffix
+        custom_name = data.get('custom_name', '').strip()
+        if not custom_name:
+            return jsonify({
+                'success': False,
+                'error': 'Custom model name is required.'
+            }), 400
+        
+        # Get selected behavior file
+        behavior_filename = data.get('behavior_filename', 'behavior.md')
+        
+        # Validate custom name (alphanumeric, hyphens, underscores only)
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', custom_name):
+            return jsonify({
+                'success': False,
+                'error': 'Custom name can only contain letters, numbers, hyphens, and underscores.'
+            }), 400
+        
+        # Initialize Ollama trainer
         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         ollama_trainer = OllamaTrainer(ollama_url)
         
-        # Train the model with selected base model
-        result = ollama_trainer.train_with_model(selected_model)
+        # Train the model with selected files, custom name, and behavior
+        result = ollama_trainer.train_with_custom_selection(
+            base_model=selected_model,
+            selected_files=selected_files,
+            custom_name=custom_name,
+            behavior_filename=behavior_filename
+        )
         
         if result['success']:
             return jsonify({
                 'success': True,
-                'message': f'Ollama model training completed successfully using {selected_model}',
+                'message': f'Ollama model training completed successfully',
                 'base_model': selected_model,
-                'trained_model': result.get('trained_model_name', f'{selected_model}-trained'),
+                'trained_model': result.get('trained_model_name'),
+                'custom_name': custom_name,
+                'selected_files': selected_files,
                 'training_examples': result.get('training_examples', 0),
                 'kb_examples': result.get('kb_examples', 0),
                 'duration': result.get('duration', 0),
@@ -830,6 +872,87 @@ def train_ollama():
         return jsonify({
             'success': False,
             'error': f'Ollama training failed: {str(e)}'
+        }), 500
+
+@app.route('/knowledge-base/structure', methods=['GET'])
+def get_knowledge_base_structure():
+    """Get the structure of the knowledge base for training selection"""
+    try:
+        knowledge_base_path = "/app/knowledge_base"
+        structure = []
+        
+        if not os.path.exists(knowledge_base_path):
+            return jsonify({
+                'success': True,
+                'structure': [],
+                'message': 'Knowledge base directory not found'
+            })
+        
+        def scan_directory(path, base_path):
+            items = []
+            try:
+                for item in sorted(os.listdir(path)):
+                    if item.startswith('.'):
+                        continue
+                    
+                    item_path = os.path.join(path, item)
+                    relative_path = os.path.relpath(item_path, base_path)
+                    
+                    if os.path.isdir(item_path):
+                        # Directory
+                        children = scan_directory(item_path, base_path)
+                        items.append({
+                            'name': item,
+                            'type': 'directory',
+                            'path': relative_path,
+                            'children': children,
+                            'file_count': sum(1 for child in children if child['type'] == 'file')
+                        })
+                    elif item.endswith('.md'):
+                        # Markdown file
+                        try:
+                            stat = os.stat(item_path)
+                            size = stat.st_size
+                            modified = datetime.fromtimestamp(stat.st_mtime).isoformat()
+                            
+                            items.append({
+                                'name': item,
+                                'type': 'file',
+                                'path': relative_path,
+                                'size': size,
+                                'modified': modified
+                            })
+                        except OSError:
+                            continue
+            except PermissionError:
+                pass
+            
+            return items
+        
+        structure = scan_directory(knowledge_base_path, knowledge_base_path)
+        
+        total_files = 0
+        def count_files(items):
+            nonlocal total_files
+            for item in items:
+                if item['type'] == 'file':
+                    total_files += 1
+                elif item['type'] == 'directory':
+                    count_files(item['children'])
+        
+        count_files(structure)
+        
+        return jsonify({
+            'success': True,
+            'structure': structure,
+            'total_files': total_files
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting knowledge base structure: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 @app.route('/performance', methods=['GET'])
@@ -852,8 +975,8 @@ def get_personality():
     """Get current personality prompt"""
     return jsonify({
         'personality_prompt': get_personality_prompt(),
-        'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md'),
-        'behavior_file_path': '/app/knowledge_base/behavior.md'
+        'has_behavior_file': os.path.exists('/app/behavior_model/behavior.md'),
+        'behavior_file_path': '/app/behavior_model/behavior.md'
     })
 
 @app.route('/personality/reload', methods=['POST'])
@@ -865,12 +988,98 @@ def reload_personality():
             'success': True,
             'message': 'Personality prompt reloaded successfully',
             'personality_prompt': get_personality_prompt(),
-            'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md')
+            'has_behavior_file': os.path.exists('/app/behavior_model/behavior.md')
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'error': f'Failed to reload personality: {str(e)}'
+        }), 500
+
+@app.route('/behaviors', methods=['GET'])
+def get_behaviors():
+    """Get list of available behavior files"""
+    try:
+        behavior_dir = "/app/behavior_model"
+        behaviors = []
+        
+        if os.path.exists(behavior_dir):
+            for filename in os.listdir(behavior_dir):
+                if filename.endswith('.md'):
+                    filepath = os.path.join(behavior_dir, filename)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            
+                        # Extract name from first header or use filename
+                        lines = content.split('\n')
+                        name = filename.replace('.md', '').replace('_', ' ').replace('-', ' ').title()
+                        description = "Custom behavior profile"
+                        preview = ""
+                        
+                        for line in lines:
+                            if line.startswith('# '):
+                                name = line[2:].strip()
+                                if ' - ' in name:
+                                    parts = name.split(' - ', 1)
+                                    name = parts[1]
+                                    description = f"{parts[0]} behavior"
+                                break
+                        
+                        # Get a preview from the content
+                        for line in lines:
+                            if line.strip() and not line.startswith('#') and not line.startswith('##'):
+                                preview = line.strip()[:100] + "..." if len(line.strip()) > 100 else line.strip()
+                                break
+                        
+                        behaviors.append({
+                            'name': name,
+                            'filename': filename,
+                            'description': description,
+                            'preview': preview
+                        })
+                        
+                    except Exception as e:
+                        print(f"Error reading behavior file {filename}: {e}")
+                        
+        return jsonify({
+            'success': True,
+            'behaviors': behaviors
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get behaviors: {str(e)}'
+        }), 500
+
+@app.route('/behaviors/select', methods=['POST'])
+def select_behavior():
+    """Select a behavior file to use"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request data is required'
+            }), 400
+            
+        behavior_filename = data.get('behavior_filename', 'behavior.md')
+        
+        # Load the selected behavior
+        load_personality_prompt(behavior_filename)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Behavior {behavior_filename} selected successfully',
+            'selected_behavior': behavior_filename,
+            'personality_prompt': get_personality_prompt()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to select behavior: {str(e)}'
         }), 500
 
 @app.route('/knowledge-base/reload', methods=['POST'])
@@ -1032,10 +1241,16 @@ def stop_model(model_name):
     try:
         success = model_manager.stop_model(model_name)
         
-        return jsonify({
-            'success': True,
-            'message': f'Model {model_name} stop requested'
-        })
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} stopped successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to stop model {model_name}'
+            }), 500
             
     except Exception as e:
         return jsonify({
@@ -1101,9 +1316,9 @@ def pull_model():
             'error': str(e)
         }), 500
 
-@app.route('/query-with-model', methods=['POST'])
-def query_with_model():
-    """Query with selected model and optional file inclusion"""
+@app.route('/models/<model_name>/delete', methods=['DELETE'])
+def delete_model(model_name):
+    """Delete a model"""
     if not MODEL_MANAGER_AVAILABLE:
         return jsonify({
             'success': False,
@@ -1111,58 +1326,25 @@ def query_with_model():
         }), 500
     
     try:
-        data = request.get_json()
-        if not data or 'question' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Question is required'
-            }), 400
+        # Check if it's a trained model before deletion for better response
+        is_trained = model_manager._is_trained_model(model_name)
         
-        question = data['question']
-        include_files = data.get('include_files', True)
-        model_name = data.get('model_name')  # Optional override
+        success = model_manager.delete_model(model_name)
         
-        # Set model if specified
-        if model_name:
-            model_manager.set_selected_model(model_name)
-        
-        # Get context if including files
-        context = ""
-        sources = []
-        if include_files and kb:
-            relevant_docs = search_knowledge_base(question, kb, num_results=5)
-            if relevant_docs:
-                context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
-                sources = [{
-                    'filename': doc['filename'],
-                    'folder_path': doc['folder_path'],
-                    'relevance': doc['relevance'],
-                    'header': doc['header'] if doc['header'] else 'No header',
-                    'content': doc['section'],
-                    'full_document_available': True
-                } for doc in relevant_docs]
-        
-        # Query the model
-        response_text = model_manager.query_with_selected_model(
-            prompt=question,
-            stream=False,
-            include_files=include_files,
-            context=context
-        )
-        
-        if response_text:
+        if success:
+            message = f'Model {model_name} deleted successfully'
+            if is_trained:
+                message += ' (including associated training files)'
+            
             return jsonify({
                 'success': True,
-                'answer': response_text,
-                'sources': sources,
-                'model_used': model_manager.get_selected_model(),
-                'include_files': include_files,
-                'method': 'model_manager'
+                'message': message,
+                'was_trained_model': is_trained
             })
         else:
             return jsonify({
                 'success': False,
-                'error': 'Failed to get response from model'
+                'error': f'Failed to delete model {model_name}'
             }), 500
             
     except Exception as e:
@@ -1170,6 +1352,120 @@ def query_with_model():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/models/cleanup-orphaned-files', methods=['POST'])
+def cleanup_orphaned_files():
+    """Clean up orphaned training files that don't correspond to existing models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        import os
+        from pathlib import Path
+        
+        local_models_dir = "/app/local_models"
+        if not os.path.exists(local_models_dir):
+            return jsonify({
+                'success': True,
+                'message': 'No local_models directory found',
+                'deleted_files': []
+            })
+        
+        # Get all existing models
+        existing_models = [model.name for model in model_manager.get_available_models()]
+        print(f"🔍 Existing models: {existing_models}")
+        
+        # Get all files in local_models directory
+        all_files = []
+        for filename in os.listdir(local_models_dir):
+            file_path = os.path.join(local_models_dir, filename)
+            if os.path.isfile(file_path):
+                all_files.append(filename)
+        
+        print(f"🔍 All files in local_models: {all_files}")
+        
+        # Find orphaned files (files that don't correspond to existing models)
+        orphaned_files = []
+        for filename in all_files:
+            is_orphaned = True
+            
+            # Check if this file corresponds to any existing model
+            for model_name in existing_models:
+                # Extract base model and custom name
+                base_model = model_manager._get_base_model(model_name)
+                safe_base_model = base_model.replace(':', '_').replace('/', '_')
+                
+                # Check various patterns
+                patterns_to_check = [
+                    f"Modelfile_{safe_base_model}",
+                    f"ollama_training_{safe_base_model}",
+                    f"ollama_training_data_{safe_base_model}",
+                ]
+                
+                # Add custom name patterns if model has custom name
+                if '-' in model_name and not model_name.endswith('-trained'):
+                    parts = model_name.split('-')
+                    if len(parts) >= 2:
+                        custom_name = '-'.join(parts[1:])
+                        patterns_to_check.extend([
+                            f"Modelfile_{safe_base_model}_{custom_name}",
+                            f"ollama_training_{safe_base_model}_{custom_name}",
+                            f"ollama_training_data_{safe_base_model}_{custom_name}",
+                        ])
+                        
+                        # Also check truncated versions
+                        for i in range(3, len(custom_name)):
+                            short_name = custom_name[:i]
+                            patterns_to_check.extend([
+                                f"Modelfile_{safe_base_model}_{short_name}",
+                                f"ollama_training_{safe_base_model}_{short_name}",
+                                f"ollama_training_data_{safe_base_model}_{short_name}",
+                            ])
+                
+                # Check if filename matches any pattern
+                for pattern in patterns_to_check:
+                    if filename.startswith(pattern):
+                        is_orphaned = False
+                        print(f"✅ File {filename} matches pattern {pattern} for model {model_name}")
+                        break
+                
+                if not is_orphaned:
+                    break
+            
+            if is_orphaned:
+                orphaned_files.append(filename)
+                print(f"❌ File {filename} is orphaned (no matching model found)")
+        
+        print(f"🔍 Orphaned files found: {orphaned_files}")
+        
+        # Delete orphaned files
+        deleted_files = []
+        for filename in orphaned_files:
+            file_path = os.path.join(local_models_dir, filename)
+            try:
+                os.remove(file_path)
+                deleted_files.append(filename)
+                print(f"🗑️ Deleted orphaned file: {filename}")
+            except OSError as e:
+                print(f"⚠️ Could not delete {filename}: {e}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {len(deleted_files)} orphaned files',
+            'deleted_files': deleted_files,
+            'total_orphaned_found': len(orphaned_files)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 
 @app.route('/query-with-model-stream', methods=['POST'])
 def query_with_model_stream():
@@ -1197,7 +1493,7 @@ def query_with_model_stream():
             context = ""
             sources = []
             if include_files and kb:
-                relevant_docs = search_knowledge_base(question, kb, num_results=5)
+                relevant_docs = search_knowledge_base(question, kb, num_results=8)  # Increased for better coverage
                 if relevant_docs:
                     context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
                     sources = [{
@@ -1217,29 +1513,59 @@ def query_with_model_stream():
                 prompt=question,
                 stream=True,
                 include_files=include_files,
-                context=context
+                context=context,
+                personality_prompt=get_personality_prompt()
             )
             
             if response_obj:
+                # Process Ollama's streaming response
+                response_count = 0
                 for line in response_obj.iter_lines():
                     if line:
                         line_str = line.decode('utf-8')
                         try:
                             data = json.loads(line_str)
+                            
+                            # Handle Ollama's streaming format
                             if 'response' in data:
-                                yield f"data: {{\"response\": \"{data['response']}\"}}\n\n"
+                                # Escape any quotes in the response text
+                                response_text = data['response'].replace('"', '\\"').replace('\n', '\\n')
+                                yield f"data: {{\"response\": \"{response_text}\"}}\n\n"
+                                response_count += 1
+                            
+                            # Check if done - break out of the loop when done
                             if data.get('done', False):
+                                print(f"✅ Streaming completed with {response_count} response chunks")
+                                # Send done signal and break
                                 yield f"data: {{\"done\": true}}\n\n"
                                 break
+                                
                         except json.JSONDecodeError:
+                            # Skip invalid JSON lines
                             continue
+                            
+                # Ensure we send a final done signal if we didn't already
+                if response_count == 0:
+                    print("⚠️ No response chunks received from Ollama")
+                yield f"data: {{\"done\": true}}\n\n"
             else:
                 yield f"data: {{\"error\": \"Failed to get response from model\"}}\n\n"
                 
         except Exception as e:
+            print(f"❌ Streaming error: {e}")
             yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
     
-    return Response(generate(), mimetype='text/plain')
+    # Return proper Server-Sent Events response
+    return Response(
+        generate(), 
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        }
+    )
 
 
 

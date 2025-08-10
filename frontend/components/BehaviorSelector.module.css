@@ -1,4 +1,4 @@
-.modelSelector {
+.behaviorSelector {
   background: #f8f9fa;
   border: 1px solid #e9ecef;
   border-radius: 8px;
@@ -42,39 +42,12 @@
   justify-content: center;
 }
 
-.manageButton {
-  background: #28a745;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .refreshButton:hover {
   background: #0056b3;
   transform: scale(1.05);
 }
 
 .refreshButton:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.manageButton:hover {
-  background: #1e7e34;
-  transform: scale(1.05);
-}
-
-.manageButton:disabled {
   background: #6c757d;
   cursor: not-allowed;
   transform: none;
@@ -100,7 +73,6 @@
 
 .dropdownTrigger:hover {
   border-color: #007bff;
-  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
 }
 
 .dropdownTrigger:focus {
@@ -110,32 +82,31 @@
 }
 
 .dropdownTrigger:disabled {
-  background: #f8f9fa;
-  cursor: not-allowed;
   opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .selectedDisplay {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  min-width: 0;
 }
 
 .selectedName {
+  display: block;
   font-weight: 600;
   color: #333;
-  font-size: 14px;
+  margin-bottom: 4px;
 }
 
 .selectedDescription {
-  font-size: 12px;
+  display: block;
+  font-size: 14px;
   color: #6c757d;
 }
 
 .dropdownArrow {
-  font-size: 12px;
   color: #6c757d;
+  font-size: 12px;
   transition: transform 0.2s ease;
 }
 
@@ -203,25 +174,25 @@
   100% { transform: rotate(360deg); }
 }
 
-.noModels {
+.noBehaviors {
   text-align: center;
   padding: 20px;
   color: #6c757d;
 }
 
-.noModels code {
+.noBehaviors code {
   background: #e9ecef;
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Courier New', monospace;
 }
 
-.modelList {
+.behaviorList {
   display: flex;
   flex-direction: column;
 }
 
-.modelOption {
+.behaviorOption {
   padding: 12px 16px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -231,82 +202,73 @@
   align-items: center;
 }
 
-.modelOption:last-child {
+.behaviorOption:last-child {
   border-bottom: none;
 }
 
-.modelOption:hover {
+.behaviorOption:hover {
   background: #f8f9fa;
 }
 
-.modelOption.selected {
+.behaviorOption.selected {
   background: #e3f2fd;
   border-left: 3px solid #007bff;
 }
 
-.modelOption.running {
-  background: #f1f8e9;
-  border-left: 3px solid #28a745;
-}
-
-.modelInfo {
+.behaviorInfo {
   flex: 1;
-  margin-right: 12px;
+  min-width: 0;
 }
 
-.modelHeader {
+.behaviorHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
 }
 
-.modelName {
+.behaviorName {
   font-weight: 600;
-  font-size: 13px;
   color: #333;
-  font-family: 'Courier New', monospace;
+  font-size: 14px;
 }
 
-.modelBadges {
+.behaviorBadges {
   display: flex;
   gap: 4px;
 }
 
 .badge {
-  background: #6c757d;
+  background: #007bff;
   color: white;
-  font-size: 9px;
-  padding: 1px 4px;
-  border-radius: 8px;
-  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 10px;
   font-weight: 500;
+  text-transform: uppercase;
 }
 
 .badge:nth-child(1) {
-  background: #17a2b8; /* Trained badge */
+  background: #28a745;
 }
 
 .badge:nth-child(2) {
-  background: #28a745; /* Running badge */
+  background: #ffc107;
+  color: #212529;
 }
 
-.modelMeta {
+.behaviorMeta {
   display: flex;
-  gap: 12px;
-  font-size: 11px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.behaviorDescription {
   color: #6c757d;
+  font-size: 12px;
 }
 
-.modelSize {
-  font-weight: 500;
-}
-
-.modelBase {
-  font-family: 'Courier New', monospace;
-}
-
-.modelActions {
+.behaviorActions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -315,79 +277,35 @@
 .checkmark {
   color: #28a745;
   font-weight: bold;
-  font-size: 14px;
-}
-
-.startButton,
-.stopButton {
-  border: none;
-  border-radius: 4px;
-  padding: 4px 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.startButton {
-  background: #28a745;
-  color: white;
-}
-
-.startButton:hover {
-  background: #1e7e34;
-  transform: scale(1.1);
-}
-
-.stopButton {
-  background: #dc3545;
-  color: white;
-}
-
-.stopButton:hover {
-  background: #c82333;
-  transform: scale(1.1);
-}
-
-.startButton:disabled,
-.stopButton:disabled {
-  background: #6c757d;
-  cursor: not-allowed;
-  transform: none;
+  font-size: 16px;
 }
 
 .summary {
-  padding: 8px 16px;
-  border-top: 1px solid #f1f3f4;
-  font-size: 11px;
-  color: #6c757d;
-  text-align: center;
+  padding: 12px 16px;
   background: #f8f9fa;
-  border-radius: 0 0 8px 8px;
+  border-top: 1px solid #e9ecef;
+  text-align: center;
+  color: #6c757d;
+  font-size: 12px;
 }
 
 .summary span {
-  margin: 0;
+  font-weight: 500;
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
-  .modelOption {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+  .behaviorOption {
+    padding: 10px 12px;
   }
   
-  .modelInfo {
-    margin-right: 0;
+  .behaviorInfo {
+    flex: 1;
+    min-width: 0;
   }
   
-  .modelActions {
-    justify-content: flex-end;
+  .behaviorActions {
+    flex-shrink: 0;
   }
   
   .dropdownMenu {

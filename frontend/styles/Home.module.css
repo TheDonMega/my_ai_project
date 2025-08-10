@@ -192,6 +192,23 @@
   font-weight: 500;
 }
 
+.cliStatus {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.cliStatusItem {
+  color: #ccc;
+  font-size: 10px;
+  font-weight: 400;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
 .cliOutput {
   padding: 16px;
   min-height: 200px;
@@ -493,4 +510,109 @@
 .loadingDots:after {
   content: '...';
   animation: dots 1.5s steps(5, end) infinite;
+}
+
+/* New Sources Display Styles */
+.sourcesContainer {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: #f0f8ff;
+  border-radius: 8px;
+  border: 1px solid #cce5ff;
+}
+
+.sourcesHeader {
+  margin-bottom: 15px;
+}
+
+.sourcesHeader h3 {
+  margin: 0 0 8px 0;
+  color: #0056b3;
+  font-size: 1.2rem;
+}
+
+.sourcesHeader p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.sourcesList {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sourceItem {
+  padding: 15px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sourceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.sourceInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.sourceFilename {
+  font-weight: bold;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.sourceFolder {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.sourceRelevance {
+  font-size: 0.85rem;
+  color: #28a745;
+  font-weight: 500;
+}
+
+.viewButton {
+  padding: 6px 12px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.viewButton:hover {
+  background-color: #0056b3;
+}
+
+.sourceContent {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sourceSection {
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.sourcePreview {
+  color: #666;
+  background-color: #f8f9fa;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
 }

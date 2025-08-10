@@ -15,7 +15,7 @@ interface QueryOptionsProps {
 export default function QueryOptions({ 
   includeFiles, 
   onIncludeFilesChange, 
-  selectedModel, 
+  selectedModel,
   disabled = false,
   collapsed = false,
   onToggleCollapse

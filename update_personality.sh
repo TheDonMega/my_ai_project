@@ -16,7 +16,7 @@ curl -X POST http://localhost:5557/knowledge-base/reload -H "Content-Type: appli
 echo ""
 echo "✅ Personality and knowledge base reloaded!"
 echo ""
-echo "📝 You can now edit ./knowledge_base/behavior.md and run this script again to reload the personality."
+echo "📝 You can now edit ./behavior_model/behavior.md and run this script again to reload the personality."
 echo "📁 New documents added to ./knowledge_base/ will be automatically detected."
 echo "🔄 Or use: curl -X POST http://localhost:5557/personality/reload"
 echo "🔄 Or use: curl -X POST http://localhost:5557/knowledge-base/reload"

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import axios from 'axios';
 import styles from './ModelSelector.module.css';
 
@@ -21,6 +22,7 @@ interface ModelSelectorProps {
 }
 
 export default function ModelSelector({ onModelSelect, selectedModel, disabled = false }: ModelSelectorProps) {
+  const router = useRouter();
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -46,6 +48,21 @@ export default function ModelSelector({ onModelSelect, selectedModel, disabled =
 
   const handleModelSelect = async (modelName: string) => {
     try {
+      setLoading(true);
+      
+      // First check if model is running
+      const model = models.find(m => m.name === modelName);
+      
+      // If model is not running, start it first
+      if (model && !model.is_running) {
+        const startResponse = await axios.post(`http://localhost:5557/models/${encodeURIComponent(modelName)}/start`);
+        if (!startResponse.data.success) {
+          setError('Failed to start model: ' + (startResponse.data.error || 'Unknown error'));
+          return;
+        }
+      }
+      
+      // Then select the model
       const response = await axios.post('http://localhost:5557/models/select', {
         model_name: modelName
       });
@@ -60,46 +77,12 @@ export default function ModelSelector({ onModelSelect, selectedModel, disabled =
     } catch (error) {
       setError('Error selecting model: ' + (error as any).message);
       console.error('Error selecting model:', error);
-    }
-  };
-
-  const startModel = async (modelName: string, event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent dropdown from closing
-    try {
-      setLoading(true);
-      const response = await axios.post(`http://localhost:5557/models/${encodeURIComponent(modelName)}/start`);
-      
-      if (response.data.success) {
-        fetchModels();
-      } else {
-        setError(response.data.error || 'Failed to start model');
-      }
-    } catch (error) {
-      setError('Error starting model: ' + (error as any).message);
-      console.error('Error starting model:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const stopModel = async (modelName: string, event: React.MouseEvent) => {
-    event.stopPropagation(); // Prevent dropdown from closing
-    try {
-      setLoading(true);
-      const response = await axios.post(`http://localhost:5557/models/${encodeURIComponent(modelName)}/stop`);
-      
-      if (response.data.success) {
-        fetchModels();
-      } else {
-        setError(response.data.error || 'Failed to stop model');
-      }
-    } catch (error) {
-      setError('Error stopping model: ' + (error as any).message);
-      console.error('Error stopping model:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     fetchModels();
@@ -136,14 +119,24 @@ export default function ModelSelector({ onModelSelect, selectedModel, disabled =
     <div className={styles.modelSelector}>
       <div className={styles.header}>
         <h3>🤖 AI Model</h3>
-        <button
-          onClick={fetchModels}
-          className={styles.refreshButton}
-          disabled={loading || disabled}
-          title="Refresh models"
-        >
-          {loading ? '🔄' : '↻'}
-        </button>
+        <div className={styles.headerButtons}>
+          <button
+            onClick={() => router.push('/manage-models')}
+            className={styles.manageButton}
+            disabled={disabled}
+            title="Manage models"
+          >
+            ⚙️
+          </button>
+          <button
+            onClick={fetchModels}
+            className={styles.refreshButton}
+            disabled={loading || disabled}
+            title="Refresh models"
+          >
+            {loading ? '🔄' : '↻'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -211,25 +204,6 @@ export default function ModelSelector({ onModelSelect, selectedModel, disabled =
                     <div className={styles.modelActions}>
                       {selectedModel === model.name && (
                         <span className={styles.checkmark}>✓</span>
-                      )}
-                      {model.is_running ? (
-                        <button
-                          onClick={(e) => stopModel(model.name, e)}
-                          className={styles.stopButton}
-                          disabled={loading}
-                          title="Stop model"
-                        >
-                          ⏹️
-                        </button>
-                      ) : (
-                        <button
-                          onClick={(e) => startModel(model.name, e)}
-                          className={styles.startButton}
-                          disabled={loading}
-                          title="Start model"
-                        >
-                          ▶️
-                        </button>
                       )}
                     </div>
                   </div>
