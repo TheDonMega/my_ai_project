@@ -45,6 +45,12 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - "View" button to see full document content in modal
   - Displays sources below CLI when files are included
   - Real-time source capture from streaming responses
+- **📄 DOCX to Markdown Conversion**: Convert Word documents to Markdown format
+  - Upload DOCX files and convert them to Markdown instantly
+  - Preserves original filename with .md extension
+  - Automatic file download after conversion
+  - Uses Microsoft's open-source markitdown library
+  - Clean, modern conversion interface
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
 - **Local AI Processing**: Uses Ollama for local AI model inference
 - **Real-time Knowledge Base Management**: Add documents without restarting containers
@@ -491,6 +497,8 @@ POST /knowledge-base/reload
 11. **Sources not displaying**: Check browser console for debugging messages
 12. **Trained model not detected**: Verify model naming convention (should end with `-tech`, `-trained`, etc.)
 13. **File inclusion not working**: Ensure "Include Files" toggle is enabled in Query Options
+14. **DOCX conversion fails**: Ensure markitdown library is installed with docx extras
+15. **Downloaded file has wrong name**: Check that the original filename is preserved with .md extension
 
 ### Debug Commands
 
@@ -529,6 +537,9 @@ curl -s http://localhost:5557/models/stats
 curl -X POST http://localhost:5557/query-with-model-stream \
   -H "Content-Type: application/json" \
   -d '{"question": "What is QA?", "include_files": true}' --no-buffer | head -5
+
+# Test DOCX conversion endpoint
+curl -X POST http://localhost:5557/convert-docx-to-markdown -F "file=@README.md" -v
 ```
 
 ## 🚀 Quick Start
@@ -617,17 +628,21 @@ my_ai_project/
 │   ├── ollama_training_llama3.2_3b.jsonl
 │   └── ollama_training_data.json
 ├── backend/                 # Python Flask server
-│   ├── server.py           # Main server with personality and model management
+│   ├── server.py           # Main server with personality, model management, and DOCX conversion
 │   ├── ollama_trainer.py   # Model training and management
 │   ├── model_manager.py    # Model management and selection
-│   └── train_knowledge_base.py  # Knowledge base indexing
+│   ├── train_knowledge_base.py  # Knowledge base indexing
+│   └── requirements.txt    # Python dependencies including markitdown[docx]
 ├── frontend/               # Next.js React application
 │   ├── pages/index.tsx     # Main interface with CLI and behavior selector
+│   ├── pages/convert-docx.tsx  # DOCX to Markdown conversion page
 │   ├── components/         # React components
 │   │   ├── BehaviorSelector.tsx  # Personality selection component
 │   │   ├── ModelSelector.tsx     # Model selection component
 │   │   └── ...              # Other UI components
-│   └── styles/            # CSS modules
+│   ├── styles/            # CSS modules
+│   │   ├── ConvertDocx.module.css  # DOCX conversion page styles
+│   │   └── ...             # Other CSS modules
 ├── docker-compose.yml      # Container orchestration
 ├── update_personality.sh   # Convenience script
 └── init_volume.sh         # Setup verification script
@@ -708,6 +723,59 @@ You are a creative, imaginative AI assistant:
 - **Vivid descriptions**: Use colorful, descriptive language
 - **Metaphors and analogies**: Explain concepts through creative comparisons
 - **Storytelling elements**: Use narrative structure when helpful
+```
+
+## 📄 DOCX to Markdown Conversion
+
+The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversion feature that allows you to easily convert Word documents to Markdown format for use in your knowledge base.
+
+### Features
+
+- **📤 Easy File Upload**: Simple drag-and-drop or click-to-upload interface
+- **🔒 File Validation**: Only accepts .docx files for security
+- **📝 Preserved Filenames**: Keeps original filename with .md extension
+- **⚡ Instant Conversion**: Fast conversion using Microsoft's markitdown library
+- **💾 Automatic Download**: Converted files are automatically downloaded
+- **🎨 Modern Interface**: Clean, responsive design that matches the app theme
+
+### How to Use
+
+1. **Access the Converter**:
+   - Click the "📄 Convert Notes to Markdown" button in the top-right corner of the main page
+   - Or navigate directly to `/convert-docx`
+
+2. **Upload Your File**:
+   - Click the upload area or drag and drop your DOCX file
+   - Only .docx files are accepted
+   - File size and name are displayed for confirmation
+
+3. **Convert and Download**:
+   - Click "Convert to Markdown" button
+   - The file is processed using the markitdown library
+   - Converted Markdown file is automatically downloaded
+   - Original filename is preserved with .md extension
+
+### Example
+
+- **Input**: `My Document.docx`
+- **Output**: `My Document.md` (automatically downloaded)
+
+### Technical Details
+
+- **Library**: Uses Microsoft's open-source [markitdown](https://github.com/microsoft/markitdown) library
+- **Dependencies**: Includes python-docx and mammoth for DOCX processing
+- **Format Support**: Converts DOCX formatting to clean Markdown
+- **Error Handling**: Comprehensive error messages for invalid files or conversion failures
+
+### API Endpoint
+
+```bash
+# Convert DOCX to Markdown
+POST /convert-docx-to-markdown
+Content-Type: multipart/form-data
+
+# Response: Markdown file download
+Content-Disposition: attachment; filename="original_name.md"
 ```
 
 ## 🔍 API Reference

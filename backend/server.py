@@ -343,8 +343,11 @@ def ask_ollama_with_context(query, context_documents):
     return "Error: Unable to get response from any Ollama model. Please check if Ollama is running and has available models."
 
 # --- Flask Web Server Setup ---
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, send_file
 from flask_cors import CORS
+import tempfile
+import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
@@ -1567,6 +1570,67 @@ def query_with_model_stream():
         }
     )
 
+
+@app.route('/convert-docx-to-markdown', methods=['POST'])
+def convert_docx_to_markdown():
+    """Convert uploaded DOCX files to Markdown format"""
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        
+        # Check if file was selected
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Check if file is a DOCX file
+        if not file.filename.lower().endswith('.docx'):
+            return jsonify({'error': 'File must be a DOCX file'}), 400
+        
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Save the uploaded file temporarily
+            docx_path = os.path.join(temp_dir, filename)
+            file.save(docx_path)
+            
+            # Convert DOCX to Markdown using markitdown
+            try:
+                from markitdown import MarkItDown
+                
+                # Create MarkItDown instance and convert the file
+                converter = MarkItDown()
+                result = converter.convert_local(docx_path)
+                markdown_content = result.text_content
+                
+                # Create the output filename (replace .docx with .md)
+                base_name = os.path.splitext(filename)[0]
+                markdown_filename = f"{base_name}.md"
+                markdown_path = os.path.join(temp_dir, markdown_filename)
+                
+                # Write the markdown content to file
+                with open(markdown_path, 'w', encoding='utf-8') as f:
+                    f.write(markdown_content)
+                
+                # Return the markdown file for download
+                return send_file(
+                    markdown_path,
+                    as_attachment=True,
+                    download_name=markdown_filename,
+                    mimetype='text/markdown'
+                )
+                
+            except ImportError:
+                return jsonify({'error': 'markitdown library not available'}), 500
+            except Exception as e:
+                return jsonify({'error': f'Conversion failed: {str(e)}'}), 500
+                
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import axios from 'axios';
 import type { Answer, Source, FullDocument } from '../types.ts';
 import DocumentModal from '../components/DocumentModal';
@@ -17,6 +18,7 @@ import { GlobalStyle } from '../styles/GlobalStyle';
 ;
 
 export default function Home() {
+  const router = useRouter();
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(false);
@@ -354,7 +356,15 @@ Ready for your first question!`;
 
   return (
     <div className={styles.container}>
-      <h1>AI Knowledge Base Assistant</h1>
+      <div className={styles.header}>
+        <h1>AI Knowledge Base Assistant</h1>
+        <button 
+          onClick={() => router.push('/convert-docx')}
+          className={styles.convertButton}
+        >
+          📄 Convert Notes to Markdown
+        </button>
+      </div>
       
       {/* Feedback notification removed - not used in current interface */}
       
