@@ -46,8 +46,10 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - Displays sources below CLI when files are included
   - Real-time source capture from streaming responses
 - **📄 DOCX to Markdown Conversion**: Convert Word documents to Markdown format
-  - Upload DOCX files and convert them to Markdown instantly
-  - Preserves original filename with .md extension
+  - Upload multiple DOCX files and convert them to Markdown instantly
+  - Drag & drop or click to select multiple files
+  - Preserves original filenames with .md extension
+  - Single file downloads as .md, multiple files as zip
   - Automatic file download after conversion
   - Uses Microsoft's open-source markitdown library
   - Clean, modern conversion interface
@@ -499,6 +501,8 @@ POST /knowledge-base/reload
 13. **File inclusion not working**: Ensure "Include Files" toggle is enabled in Query Options
 14. **DOCX conversion fails**: Ensure markitdown library is installed with docx extras
 15. **Downloaded file has wrong name**: Check that the original filename is preserved with .md extension
+16. **Multiple files not working**: Ensure files are being sent as 'files' parameter, not 'file'
+17. **Zip file not downloading**: Check that zipfile module is available in Python environment
 
 ### Debug Commands
 
@@ -538,8 +542,11 @@ curl -X POST http://localhost:5557/query-with-model-stream \
   -H "Content-Type: application/json" \
   -d '{"question": "What is QA?", "include_files": true}' --no-buffer | head -5
 
-# Test DOCX conversion endpoint
-curl -X POST http://localhost:5557/convert-docx-to-markdown -F "file=@README.md" -v
+# Test DOCX conversion endpoint (single file)
+curl -X POST http://localhost:5557/convert-docx-to-markdown -F "files=@README.md" -v
+
+# Test DOCX conversion endpoint (multiple files)
+curl -X POST http://localhost:5557/convert-docx-to-markdown -F "files=@README.md" -F "files=@package.json" -v
 ```
 
 ## 🚀 Quick Start
@@ -731,9 +738,10 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
 
 ### Features
 
-- **📤 Easy File Upload**: Simple drag-and-drop or click-to-upload interface
+- **📤 Multiple File Upload**: Drag & drop or click to select multiple DOCX files
 - **🔒 File Validation**: Only accepts .docx files for security
-- **📝 Preserved Filenames**: Keeps original filename with .md extension
+- **📝 Preserved Filenames**: Keeps original filenames with .md extension
+- **📦 Smart Download**: Single file downloads as .md, multiple files as zip
 - **⚡ Instant Conversion**: Fast conversion using Microsoft's markitdown library
 - **💾 Automatic Download**: Converted files are automatically downloaded
 - **🎨 Modern Interface**: Clean, responsive design that matches the app theme
@@ -744,21 +752,28 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
    - Click the "📄 Convert Notes to Markdown" button in the top-right corner of the main page
    - Or navigate directly to `/convert-docx`
 
-2. **Upload Your File**:
-   - Click the upload area or drag and drop your DOCX file
+2. **Upload Your Files**:
+   - Click the upload area or drag and drop your DOCX files
+   - Select multiple files by holding Ctrl/Cmd while clicking
    - Only .docx files are accepted
-   - File size and name are displayed for confirmation
+   - File sizes and names are displayed for confirmation
 
 3. **Convert and Download**:
    - Click "Convert to Markdown" button
-   - The file is processed using the markitdown library
-   - Converted Markdown file is automatically downloaded
-   - Original filename is preserved with .md extension
+   - Files are processed using the markitdown library
+   - Single file: downloads as .md file
+   - Multiple files: downloads as zip file with all converted files
+   - Original filenames are preserved with .md extension
 
-### Example
+### Examples
 
-- **Input**: `My Document.docx`
-- **Output**: `My Document.md` (automatically downloaded)
+- **Single File**: 
+  - Input: `My Document.docx`
+  - Output: `My Document.md` (automatically downloaded)
+
+- **Multiple Files**:
+  - Input: `Report.docx`, `Notes.docx`, `Summary.docx`
+  - Output: `Report_and_2_more_files.zip` (contains all converted .md files)
 
 ### Technical Details
 
@@ -770,12 +785,15 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
 ### API Endpoint
 
 ```bash
-# Convert DOCX to Markdown
+# Convert DOCX to Markdown (single or multiple files)
 POST /convert-docx-to-markdown
 Content-Type: multipart/form-data
 
-# Response: Markdown file download
+# Single file response: Markdown file download
 Content-Disposition: attachment; filename="original_name.md"
+
+# Multiple files response: Zip file download
+Content-Disposition: attachment; filename="firstfile_and_X_more_files.zip"
 ```
 
 ## 🔍 API Reference

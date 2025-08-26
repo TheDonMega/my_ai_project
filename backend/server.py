@@ -1575,59 +1575,91 @@ def query_with_model_stream():
 def convert_docx_to_markdown():
     """Convert uploaded DOCX files to Markdown format"""
     try:
-        # Check if file was uploaded
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file uploaded'}), 400
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
         
-        file = request.files['file']
+        files = request.files.getlist('files')
         
-        # Check if file was selected
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+        # Check if files were selected
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': 'No files selected'}), 400
         
-        # Check if file is a DOCX file
-        if not file.filename.lower().endswith('.docx'):
-            return jsonify({'error': 'File must be a DOCX file'}), 400
-        
-        # Secure the filename
-        filename = secure_filename(file.filename)
+        # Check if all files are DOCX files
+        invalid_files = [file.filename for file in files if not file.filename.lower().endswith('.docx')]
+        if invalid_files:
+            return jsonify({'error': f'All files must be DOCX files. Invalid files: {", ".join(invalid_files)}'}), 400
         
         # Create a temporary directory for processing
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Save the uploaded file temporarily
-            docx_path = os.path.join(temp_dir, filename)
-            file.save(docx_path)
+            converted_files = []
             
-            # Convert DOCX to Markdown using markitdown
-            try:
-                from markitdown import MarkItDown
+            # Process each file
+            for file in files:
+                if file.filename == '':
+                    continue
+                    
+                # Secure the filename
+                filename = secure_filename(file.filename)
                 
-                # Create MarkItDown instance and convert the file
-                converter = MarkItDown()
-                result = converter.convert_local(docx_path)
-                markdown_content = result.text_content
+                # Save the uploaded file temporarily
+                docx_path = os.path.join(temp_dir, filename)
+                file.save(docx_path)
                 
-                # Create the output filename (replace .docx with .md)
-                base_name = os.path.splitext(filename)[0]
-                markdown_filename = f"{base_name}.md"
-                markdown_path = os.path.join(temp_dir, markdown_filename)
-                
-                # Write the markdown content to file
-                with open(markdown_path, 'w', encoding='utf-8') as f:
-                    f.write(markdown_content)
-                
-                # Return the markdown file for download
+                # Convert DOCX to Markdown using markitdown
+                try:
+                    from markitdown import MarkItDown
+                    
+                    # Create MarkItDown instance and convert the file
+                    converter = MarkItDown()
+                    result = converter.convert_local(docx_path)
+                    markdown_content = result.text_content
+                    
+                    # Create the output filename (replace .docx with .md)
+                    base_name = os.path.splitext(filename)[0]
+                    markdown_filename = f"{base_name}.md"
+                    markdown_path = os.path.join(temp_dir, markdown_filename)
+                    
+                    # Write the markdown content to file
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(markdown_content)
+                    
+                    converted_files.append((markdown_path, markdown_filename))
+                    
+                except ImportError:
+                    return jsonify({'error': 'markitdown library not available'}), 500
+                except Exception as e:
+                    return jsonify({'error': f'Conversion failed for {filename}: {str(e)}'}), 500
+            
+            # Return single file or create zip for multiple files
+            if len(converted_files) == 1:
+                # Single file - return directly
+                markdown_path, markdown_filename = converted_files[0]
                 return send_file(
                     markdown_path,
                     as_attachment=True,
                     download_name=markdown_filename,
                     mimetype='text/markdown'
                 )
+            else:
+                # Multiple files - create zip
+                import zipfile
+                zip_path = os.path.join(temp_dir, 'converted_files.zip')
                 
-            except ImportError:
-                return jsonify({'error': 'markitdown library not available'}), 500
-            except Exception as e:
-                return jsonify({'error': f'Conversion failed: {str(e)}'}), 500
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for markdown_path, markdown_filename in converted_files:
+                        zipf.write(markdown_path, markdown_filename)
+                
+                # Create zip filename based on first file
+                first_filename = os.path.splitext(secure_filename(files[0].filename))[0]
+                zip_filename = f"{first_filename}_and_{len(converted_files) - 1}_more_files.zip"
+                
+                return send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name=zip_filename,
+                    mimetype='application/zip'
+                )
                 
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500

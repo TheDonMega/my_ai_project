@@ -3,31 +3,32 @@ import { useRouter } from 'next/router';
 import styles from '../styles/ConvertDocx.module.css';
 
 export default function ConvertDocx() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const router = useRouter();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Check if file is a DOCX file
-      if (!file.name.toLowerCase().endsWith('.docx')) {
-        setError('Please select a DOCX file');
-        setSelectedFile(null);
+    const files = Array.from(event.target.files || []);
+    if (files.length > 0) {
+      // Check if all files are DOCX files
+      const invalidFiles = files.filter(file => !file.name.toLowerCase().endsWith('.docx'));
+      if (invalidFiles.length > 0) {
+        setError(`Please select only DOCX files. Invalid files: ${invalidFiles.map(f => f.name).join(', ')}`);
+        setSelectedFiles([]);
         return;
       }
       
-      setSelectedFile(file);
+      setSelectedFiles(files);
       setError(null);
       setSuccess(null);
     }
   };
 
   const handleConvert = async () => {
-    if (!selectedFile) {
-      setError('Please select a file first');
+    if (selectedFiles.length === 0) {
+      setError('Please select at least one file first');
       return;
     }
 
@@ -37,7 +38,9 @@ export default function ConvertDocx() {
 
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      selectedFiles.forEach(file => {
+        formData.append('files', file);
+      });
 
       const response = await fetch('http://localhost:5557/convert-docx-to-markdown', {
         method: 'POST',
@@ -51,7 +54,7 @@ export default function ConvertDocx() {
 
       // Get the filename for download
       const contentDisposition = response.headers.get('content-disposition');
-      let filename = 'converted.md';
+      let filename = selectedFiles.length === 1 ? 'converted.md' : 'converted_files.zip';
       
       if (contentDisposition) {
         // Try different patterns for filename extraction
@@ -70,11 +73,17 @@ export default function ConvertDocx() {
         }
       }
       
-      // If we still don't have a proper filename, use the original file name with .md extension
-      if (filename === 'converted.md' && selectedFile) {
-        const originalName = selectedFile.name;
-        const baseName = originalName.replace(/\.docx$/i, '');
-        filename = `${baseName}.md`;
+      // If we still don't have a proper filename, create one based on files
+      if (filename === 'converted.md' || filename === 'converted_files.zip') {
+        if (selectedFiles.length === 1) {
+          const originalName = selectedFiles[0].name;
+          const baseName = originalName.replace(/\.docx$/i, '');
+          filename = `${baseName}.md`;
+        } else {
+          // Create a zip filename based on the first file or use a generic name
+          const firstFileName = selectedFiles[0].name.replace(/\.docx$/i, '');
+          filename = `${firstFileName}_and_${selectedFiles.length - 1}_more_files.zip`;
+        }
       }
 
       // Create blob and download
@@ -88,8 +97,9 @@ export default function ConvertDocx() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setSuccess(`Successfully converted and downloaded ${filename}`);
-      setSelectedFile(null);
+      const fileText = selectedFiles.length === 1 ? 'file' : 'files';
+      setSuccess(`Successfully converted and downloaded ${selectedFiles.length} ${fileText} as ${filename}`);
+      setSelectedFiles([]);
       
       // Reset file input
       const fileInput = document.getElementById('file-input') as HTMLInputElement;
@@ -126,6 +136,7 @@ export default function ConvertDocx() {
             id="file-input"
             type="file"
             accept=".docx"
+            multiple
             onChange={handleFileSelect}
             className={styles.fileInput}
           />
@@ -133,15 +144,15 @@ export default function ConvertDocx() {
             <div className={styles.uploadContent}>
               <div className={styles.uploadIcon}>📄</div>
               <div className={styles.uploadText}>
-                {selectedFile ? (
+                {selectedFiles.length > 0 ? (
                   <>
-                    <strong>Selected: {selectedFile.name}</strong>
-                    <span>Click to change file</span>
+                    <strong>Selected: {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''}</strong>
+                    <span>Click to change files</span>
                   </>
                 ) : (
                   <>
-                    <strong>Choose a DOCX file</strong>
-                    <span>or drag and drop here</span>
+                    <strong>Choose DOCX files</strong>
+                    <span>or drag and drop here (multiple files supported)</span>
                   </>
                 )}
               </div>
@@ -149,13 +160,17 @@ export default function ConvertDocx() {
           </label>
         </div>
 
-        {selectedFile && (
+        {selectedFiles.length > 0 && (
           <div className={styles.fileInfo}>
             <div className={styles.fileDetails}>
-              <span className={styles.fileName}>{selectedFile.name}</span>
-              <span className={styles.fileSize}>
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </span>
+              {selectedFiles.map((file, index) => (
+                <div key={index} className={styles.fileItem}>
+                  <span className={styles.fileName}>{file.name}</span>
+                  <span className={styles.fileSize}>
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -174,10 +189,10 @@ export default function ConvertDocx() {
 
         <button
           onClick={handleConvert}
-          disabled={!selectedFile || isConverting}
+          disabled={selectedFiles.length === 0 || isConverting}
           className={styles.convertButton}
         >
-          {isConverting ? 'Converting...' : 'Convert to Markdown'}
+          {isConverting ? 'Converting...' : `Convert ${selectedFiles.length > 0 ? selectedFiles.length : ''} file${selectedFiles.length !== 1 ? 's' : ''} to Markdown`}
         </button>
       </div>
 

@@ -138,8 +138,18 @@
 
 .fileDetails {
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fileItem {
+  display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border-left: 3px solid #667eea;
 }
 
 .fileName {
