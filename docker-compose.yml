@@ -1,29 +1,6 @@
 version: '3.8'
 
 services:
-  ollama-ai-project:
-    image: ollama/ollama:latest
-    container_name: ollama-ai-project
-    ports:
-      - "11435:11434"
-    volumes:
-      - ollama_ai_project_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_ORIGINS=*
-      - OLLAMA_KEEP_ALIVE=5m
-    restart: unless-stopped
-    # Performance optimizations
-    shm_size: '2gb'  # Increase shared memory for better performance
-    deploy:
-      resources:
-        limits:
-          memory: 12G
-          cpus: '6.0'
-        reservations:
-          memory: 6G
-          cpus: '3.0'
-
   backend:
     build:
       context: .
@@ -32,18 +9,18 @@ services:
       - "5557:5557"
     volumes:
       - ${PWD:-.}/knowledge_base:/app/knowledge_base
+      - ${PWD:-.}/behavior_model:/app/behavior_model
       - ${PWD:-.}/vector_store:/app/vector_store
+      - ${PWD:-.}/local_models:/app/local_models
     environment:
       - PIP_NO_CACHE_DIR=1
       - PIP_DISABLE_PIP_VERSION_CHECK=1
       - PYTHONUNBUFFERED=1
-      - OLLAMA_BASE_URL=http://ollama-ai-project:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - EMBEDDING_MODEL=nomic-embed-text
-      - LLM_MODEL=llama2
+      - LLM_MODEL=llama3.2:3b
       - USE_CHROMA=true
       - HYBRID_WEIGHT=0.7
-    depends_on:
-      - ollama-ai-project
     deploy:
       resources:
         limits:
@@ -71,6 +48,3 @@ services:
         reservations:
           memory: 512M
           cpus: '0.25'
-
-volumes:
-  ollama_ai_project_data:

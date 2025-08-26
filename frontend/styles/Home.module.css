@@ -1,40 +1,47 @@
 .container { max-width: 800px; margin: 0 auto; padding: 20px; }
 
-.navigation {
-  margin-bottom: 20px;
-  text-align: right;
-}
-
-.navLink {
-  display: inline-flex;
+.header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background-color: #f8f9fa;
-  color: #495057;
-  text-decoration: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  border: 1px solid #dee2e6;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e9ecef;
 }
 
-.navLink:hover {
-  background-color: #e9ecef;
-  color: #212529;
-  text-decoration: none;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+.header h1 {
+  margin: 0;
+  color: #333;
+  font-size: 2rem;
+  font-weight: 700;
 }
+
+.convertButton {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.convertButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+
 
 .status { margin-bottom: 20px; padding: 10px; background-color: #e8f5e9; border-radius: 4px; color: #2e7d32; }
 
-.lastTraining {
-  margin-top: 5px;
-  font-size: 0.9em;
-  color: #666;
-  font-style: italic;
-}
+
 
 .trainingSection {
   margin-bottom: 30px;
@@ -51,11 +58,40 @@
   margin-bottom: 15px;
 }
 
-.trainingButtons {
+.trainingTitle {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 8px;
 }
+
+.collapseButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collapseButton:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.collapseIcon {
+  font-size: 12px;
+  color: #6c757d;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+.collapseIcon.collapsed {
+  transform: rotate(-90deg);
+}
+
+
 
 .trainingHeader h3 {
   margin: 0;
@@ -77,31 +113,7 @@
   gap: 5px;
 }
 
-.dashboardButton {
-  padding: 10px 20px;
-  background-color: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
 
-.dashboardButton:hover {
-  background-color: #1976D2;
-}
-
-.dashboardContainer {
-  margin-top: 20px;
-  padding: 20px;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
 
 .trainingButton:hover:not(:disabled) {
   background-color: #138496;
@@ -147,6 +159,20 @@
   100% { transform: translateX(100%); }
 }
 
+.trainingContent {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+}
+
+.trainingContent.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .trainingInfo {
   margin-top: 15px;
   padding: 15px;
@@ -172,80 +198,204 @@
   margin-bottom: 5px;
 }
 
-.form { margin-bottom: 20px; }
-.form textarea { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; resize: vertical; min-height: 100px; }
+/* CLI Interface Styles */
+.cliContainer {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
+  overflow: hidden;
+}
+
+.cliHeader {
+  background: #2d2d2d;
+  padding: 8px 16px;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cliPrompt {
+  color: #00ff00;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.cliTitle {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cliStatus {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.cliStatusItem {
+  color: #ccc;
+  font-size: 10px;
+  font-weight: 400;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.cliOutput {
+  padding: 16px;
+  min-height: 200px;
+  max-height: 400px;
+  overflow-y: auto;
+  background: #1e1e1e;
+}
+
+.cliEntry {
+  margin-bottom: 8px;
+}
+
+.cliEntry:last-child {
+  margin-bottom: 0;
+}
+
+.cliInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cliCommand {
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cliResponse {
+  color: #e0e0e0;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+}
+
+.cliCursor {
+  color: #00ff00;
+  font-weight: bold;
+  font-size: 16px;
+  animation: blink 0.8s infinite;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cliInputContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #2d2d2d;
+  border-top: 1px solid #333;
+}
+
+.cliInputField {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.cliInputField::placeholder {
+  color: #666;
+}
+
+.cliInputField:disabled {
+  color: #666;
+  cursor: not-allowed;
+}
+
+/* Scrollbar styling for CLI output */
+.cliOutput::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cliOutput::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.cliOutput::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.cliOutput::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
 
 .buttonContainer {
   display: flex;
   gap: 10px;
   margin-top: 10px;
+  margin-bottom: 16px;
 }
 
-.localSearchButton {
-  flex: 1;
-  padding: 12px 20px;
-  background-color: #28a745;
+.primaryButton,
+.streamButton {
+  background: linear-gradient(135deg, #007bff, #0056b3);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.localSearchButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.localSearchButton:hover:not(:disabled) {
-  background-color: #218838;
-}
-
-.aiAnalysisButton {
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+  position: relative;
+  overflow: hidden;
   flex: 1;
-  padding: 12px 20px;
-  background-color: #0070f3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
 }
 
-.aiAnalysisButton:disabled {
-  background-color: #ccc;
+.primaryButton:hover,
+.streamButton:hover {
+  background: linear-gradient(135deg, #0056b3, #004085);
+  box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.primaryButton:disabled,
+.streamButton:disabled {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
-.aiAnalysisButton:hover:not(:disabled) {
-  background-color: #0051c3;
+.streamButton {
+  background: linear-gradient(135deg, #28a745, #1e7e34);
 }
 
-.ollamaAnalysisButton {
-  flex: 1;
-  padding: 12px 20px;
-  background-color: #8B5CF6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 1rem;
-  font-weight: 500;
+.streamButton:hover {
+  background: linear-gradient(135deg, #1e7e34, #155724);
 }
 
-.ollamaAnalysisButton:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+.streamButton:disabled {
+  background: linear-gradient(135deg, #6c757d, #5a6268);
 }
 
-.ollamaAnalysisButton:hover:not(:disabled) {
-  background-color: #7C3AED;
-}
+
 
 .button { padding: 10px 20px; background-color: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 1rem; }
 .button:disabled { background-color: #ccc; cursor: not-allowed; }
@@ -397,4 +547,138 @@
 .loadingDots:after {
   content: '...';
   animation: dots 1.5s steps(5, end) infinite;
+}
+
+/* New Sources Display Styles */
+.sourcesContainer {
+  margin: 20px 0;
+  padding: 20px;
+  background-color: #f0f8ff;
+  border-radius: 8px;
+  border: 1px solid #cce5ff;
+}
+
+.sourcesHeader {
+  margin-bottom: 15px;
+}
+
+.sourcesHeader h3 {
+  margin: 0 0 8px 0;
+  color: #0056b3;
+  font-size: 1.2rem;
+}
+
+.sourcesHeader p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.sourcesList {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.sourceItem {
+  padding: 15px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.sourceHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.sourceInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.sourceFilename {
+  font-weight: bold;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.sourceFolder {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.sourceRelevance {
+  font-size: 0.85rem;
+  color: #28a745;
+  font-weight: 500;
+}
+
+.viewButton {
+  padding: 6px 12px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.viewButton:hover {
+  background-color: #0056b3;
+}
+
+.sourceContent {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.sourceSection {
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.sourcePreview {
+  color: #666;
+  background-color: #f8f9fa;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
+}
+
+/* Responsive design for header */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+  }
+  
+  .header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .convertButton {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .convertButton {
+    font-size: 0.8rem;
+    padding: 10px 20px;
+  }
 }

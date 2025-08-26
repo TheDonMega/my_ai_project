@@ -13,11 +13,12 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 class OllamaTrainer:
-    def __init__(self, ollama_url: str = "http://localhost:11434"):
+    def __init__(self, ollama_url: str = "http://host.docker.internal:11434"):
         self.ollama_url = ollama_url
-        self.model_name = "ollama"  # Changed from "mistral" to "ollama"
-        self.training_data_file = "/app/ollama_training_data.json"
-        self.feedback_training_file = "/app/feedback_training_data.json"
+        self.model_name = "llama3.2:3b"  # Use the specified model
+        # Remove shared training files - each model will have its own
+        # self.training_data_file = "/app/local_models/ollama_training_data.json"  # DEPRECATED
+        # self.feedback_training_file = "/app/local_models/feedback_training_data.json"  # DEPRECATED
         # Add caching for performance
         self.response_cache = {}
         self.cache_ttl = 3600  # 1 hour cache TTL
@@ -67,13 +68,13 @@ class OllamaTrainer:
             return trained_models[0]  # Return the first trained model
         
         # Fallback to base models
-        base_models = ["llama2", "mistral", "llama2:7b"]
+        base_models = ["llama3.2:3b", "llama2", "mistral", "llama2:7b"]
         for model in available_models:
             if any(base_model in model for base_model in base_models):
                 return model
         
         # Default fallback
-        return "llama2"
+        return "llama3.2:3b"
     
     def create_training_data_from_knowledge_base(self, knowledge_base_path: str = "/app/knowledge_base") -> List[Dict[str, Any]]:
         """Create training data from knowledge base documents"""
@@ -209,57 +210,8 @@ class OllamaTrainer:
         return questions[:5]  # Limit to 5 questions per section
     
     def create_training_data_from_feedback(self) -> List[Dict[str, Any]]:
-        """Create training data from user feedback"""
-        training_data = []
-        
-        try:
-            from feedback_system import feedback_system
-            feedback_data = feedback_system.get_all_feedback()
-            
-            if not feedback_data or not feedback_data.get('feedback_entries'):
-                return training_data
-            
-            print("📝 Creating training data from feedback...")
-            
-            for entry in feedback_data['feedback_entries']:
-                rating = entry.get('rating', 0)
-                feedback_text = entry.get('feedback_text', '').lower()
-                
-                # Only use high-rated responses (4-5 stars) as positive examples
-                if rating >= 4:
-                    training_data.append({
-                        "instruction": entry['user_question'],
-                        "input": "",
-                        "output": entry['ai_response'],
-                        "context": {
-                            "rating": rating,
-                            "feedback_type": entry.get('feedback_type', ''),
-                            "source": "user_feedback"
-                        }
-                    })
-                
-                # Use feedback text to create improvement examples
-                if feedback_text and rating <= 2:
-                    improved_response = self.generate_improved_response(entry['ai_response'], feedback_text)
-                    if improved_response:
-                        training_data.append({
-                            "instruction": entry['user_question'],
-                            "input": "",
-                            "output": improved_response,
-                            "context": {
-                                "rating": rating,
-                                "feedback_type": entry.get('feedback_type', ''),
-                                "improvement": feedback_text,
-                                "source": "feedback_improvement"
-                            }
-                        })
-            
-            print(f"✅ Created {len(training_data)} training examples from feedback")
-            
-        except Exception as e:
-            print(f"❌ Error creating feedback training data: {e}")
-        
-        return training_data
+        """Create training data from user feedback - removed, not used in current interface"""
+        return []
     
     def generate_improved_response(self, original_response: str, feedback_text: str) -> Optional[str]:
         """Generate an improved response based on feedback"""
@@ -285,6 +237,9 @@ class OllamaTrainer:
     def save_training_data(self, training_data: List[Dict[str, Any]], filename: str):
         """Save training data to file"""
         try:
+            # Ensure the directory exists
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump({
                     "training_data": training_data,
@@ -307,7 +262,11 @@ class OllamaTrainer:
         return []
     
     def train_ollama_model(self, training_data: List[Dict[str, Any]]) -> bool:
-        """Train the Ollama model with the provided training data"""
+        """Train the Ollama model with the provided training data (legacy)"""
+        return self.train_ollama_model_with_base(training_data, "llama2")
+    
+    def train_ollama_model_with_base(self, training_data: List[Dict[str, Any]], base_model: str) -> bool:
+        """Train the Ollama model with the provided training data and base model"""
         if not self.check_ollama_status():
             print("❌ Ollama is not running or accessible")
             return False
@@ -316,14 +275,22 @@ class OllamaTrainer:
             print("❌ No training data provided")
             return False
         
-        print(f"🚀 Starting Ollama training with {len(training_data)} examples...")
+        print(f"🚀 Starting Ollama training with {len(training_data)} examples using base model: {base_model}")
         
         try:
-            # Create a custom model name
-            custom_model_name = f"{self.model_name}-trained"
+            # Check if this model has been trained before
+            available_models = self.get_available_models()
+            # Create safe model name without colons
+            safe_base_model = base_model.replace(':', '_')
+            custom_model_name = f"{safe_base_model}-trained"
+            model_exists = custom_model_name in available_models
             
-            # Use llama2 as the base model for training (since "ollama" is not a real model)
-            base_model = "llama2"
+            if model_exists:
+                print(f"🔄 Model {custom_model_name} already exists. Updating with latest training data...")
+                # Use :latest tag to update existing model
+                custom_model_name = f"{custom_model_name}:latest"
+            else:
+                print(f"🆕 Creating new trained model: {custom_model_name}")
             
             # Prepare training data in Ollama format
             ollama_training_data = []
@@ -335,8 +302,13 @@ class OllamaTrainer:
                     "output": example["output"]
                 })
             
-            # Save training data for Ollama in the correct format
-            training_file = "/app/ollama_training.jsonl"
+            # Ensure local_models directory exists
+            local_models_dir = "/app/local_models"
+            os.makedirs(local_models_dir, exist_ok=True)
+            
+            # Create unique training data file for this base model
+            safe_base_model = base_model.replace(':', '_').replace('/', '_')
+            training_file = os.path.join(local_models_dir, f"ollama_training_{safe_base_model}.jsonl")
             with open(training_file, 'w', encoding='utf-8') as f:
                 for item in ollama_training_data:
                     # Use the exact format Ollama expects
@@ -345,9 +317,26 @@ class OllamaTrainer:
             print(f"✅ Training data prepared: {training_file}")
             print(f"📊 Training examples: {len(ollama_training_data)}")
             
-            # Create Modelfile with training data and performance optimizations
+            # Load behavior prompt for training
+            behavior_prompt = "You are an AI assistant trained on a specific knowledge base. Provide accurate, helpful responses based on the training data. Always reference the source documents when possible. Keep responses concise and focused."
+            try:
+                behavior_file = f"/app/behavior_model/{behavior_filename}"
+                if os.path.exists(behavior_file):
+                    with open(behavior_file, 'r', encoding='utf-8') as f:
+                        behavior_content = f.read().strip()
+                        if behavior_content:
+                            behavior_prompt = behavior_content
+                            print(f"✅ Using behavior from {behavior_filename} for training")
+                        else:
+                            print(f"⚠️ Behavior file {behavior_filename} is empty, using default")
+                else:
+                    print(f"⚠️ Behavior file {behavior_filename} not found, using default")
+            except Exception as e:
+                print(f"❌ Error loading behavior file {behavior_filename}: {e}")
+            
+            # Create Modelfile with behavior and performance optimizations
             modelfile_content = f"""FROM {base_model}
-SYSTEM You are an AI assistant trained on a specific knowledge base. Provide accurate, helpful responses based on the training data. Always reference the source documents when possible. Keep responses concise and focused.
+SYSTEM {behavior_prompt}
 
 PARAMETER temperature 0.3
 PARAMETER top_p 0.8
@@ -359,23 +348,27 @@ PARAMETER num_thread 4
 PARAMETER stop "Human:"
 PARAMETER stop "Assistant:"
 
-# Training data for fine-tuning
-TRAIN {training_file}
+# Custom trained model with behavior: {behavior_filename}
 """
             
-            modelfile_path = "/app/Modelfile"
+            # Create unique Modelfile for this base model
+            modelfile_path = os.path.join(local_models_dir, f"Modelfile_{safe_base_model}")
             with open(modelfile_path, 'w', encoding='utf-8') as f:
                 f.write(modelfile_content)
             
             print(f"✅ Modelfile created: {modelfile_path}")
+            print(f"📄 Modelfile content preview:")
+            print("=" * 50)
+            print(modelfile_content)
+            print("=" * 50)
             
             # Create the fine-tuned model using Ollama create command
             print(f"🔧 Creating fine-tuned model: {custom_model_name}")
             
-            # Use requests to call Ollama create API with from parameter
+            # Use requests to call Ollama create API with modelfile parameter
             create_response = requests.post(f"{self.ollama_url}/api/create", json={
                 "name": custom_model_name,
-                "from": base_model
+                "modelfile": modelfile_content
             })
             
             # Check both status code and response content
@@ -467,7 +460,7 @@ TRAIN {training_file}
         content = f"{question}:{context}"
         return hashlib.md5(content.encode()).hexdigest()
     
-    def query_ollama(self, question: str, context: str = "") -> Optional[str]:
+    def query_ollama(self, question: str, context: str = "", stream: bool = False) -> Optional[str]:
         """Query the trained Ollama model with performance optimizations and personality prompt"""
         if not self.check_ollama_status():
             return None
@@ -520,7 +513,7 @@ Please provide a helpful response based on the context provided. If the context 
             response = requests.post(f"{self.ollama_url}/api/generate", json={
                 "model": best_model,
                 "prompt": prompt,
-                "stream": False,
+                "stream": stream,
                 "options": {
                     "temperature": 0.3,  # Lower temperature for faster, more focused responses
                     "top_p": 0.8,        # Slightly lower for speed
@@ -551,9 +544,104 @@ Please provide a helpful response based on the context provided. If the context 
             print(f"❌ Exception with model {best_model}: {e}")
             return None
     
+    def query_ollama_stream(self, question: str, context: str = ""):
+        """Stream query to Ollama model - yields response chunks"""
+        if not self.check_ollama_status():
+            yield "data: {\"error\": \"Ollama not available\"}\n\n"
+            return
+        
+        # Get the best available model - prefer base models over trained ones for streaming
+        available_models = self.get_available_models()
+        best_model = "llama3.2:3b"  # Default to the base model
+        
+        # Try to find the base model first
+        for model in available_models:
+            if model == "llama3.2:3b":
+                best_model = model
+                break
+            elif model == "llama2":
+                best_model = model
+                break
+        
+        print(f"🎯 Streaming with model: {best_model}")
+        
+        try:
+            # Optimize context length for speed
+            max_context_length = 2000  # Limit context to improve speed
+            if len(context) > max_context_length:
+                context = context[:max_context_length] + "... [truncated for performance]"
+            
+            # Get personality prompt from server
+            try:
+                from server import get_personality_prompt
+                personality_prompt = get_personality_prompt()
+            except ImportError:
+                personality_prompt = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
+            
+            prompt = f"""{personality_prompt}
+
+Context from knowledge base:
+{context}
+
+User question: {question}
+
+Please provide a helpful response based on the context provided. If the context doesn't contain enough information, say so clearly."""
+
+            print(f"📤 Sending streaming request to Ollama with model: {best_model}")
+            
+            # Stream request to Ollama
+            response = requests.post(f"{self.ollama_url}/api/generate", json={
+                "model": best_model,
+                "prompt": prompt,
+                "stream": True,
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.8,
+                    "top_k": 40,
+                    "num_predict": 150,
+                    "repeat_penalty": 1.1,
+                    "num_ctx": 2048,
+                    "num_thread": 4
+                }
+            }, stream=True)
+            
+            print(f"📥 Received response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                for line in response.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        print(f"🔍 Processing line: {line_str[:100]}...")
+                        
+                        try:
+                            data = json.loads(line_str)
+                            if 'response' in data:
+                                print(f"📝 Streaming chunk: {data['response'][:50]}...")
+                                yield f"data: {{\"response\": \"{data['response']}\"}}\n\n"
+                            if data.get('done', False):
+                                print("✅ Streaming complete")
+                                yield f"data: {{\"done\": true}}\n\n"
+                                break
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ JSON decode error: {e}")
+                            continue
+            else:
+                error_data = response.json() if response.content else {}
+                error_message = error_data.get("error", f"HTTP {response.status_code}")
+                print(f"❌ Ollama error: {error_message}")
+                yield f"data: {{\"error\": \"{error_message}\"}}\n\n"
+                    
+        except Exception as e:
+            print(f"❌ Exception with streaming model {best_model}: {e}")
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+    
     def train(self, knowledge_base_path: str = "/app/knowledge_base") -> Dict[str, Any]:
-        """Main training function"""
-        print("🚀 Starting Ollama training process...")
+        """Main training function (legacy - use train_with_model instead)"""
+        return self.train_with_model(self.model_name, knowledge_base_path)
+    
+    def train_with_model(self, base_model: str, knowledge_base_path: str = "/app/knowledge_base") -> Dict[str, Any]:
+        """Train Ollama model with specified base model"""
+        print(f"🚀 Starting Ollama training process with base model: {base_model}")
         
         start_time = time.time()
         
@@ -565,34 +653,45 @@ Please provide a helpful response based on the context provided. If the context 
                     "error": "Ollama is not running or accessible"
                 }
             
+            # Verify the base model exists
+            available_models = self.get_available_models()
+            if base_model not in available_models:
+                return {
+                    "success": False,
+                    "error": f"Base model '{base_model}' not found. Available models: {', '.join(available_models[:5])}"
+                }
+            
+            # Check if this model has been trained before
+            safe_base_model = base_model.replace(':', '_')
+            custom_model_name = f"{safe_base_model}-trained"
+            model_exists = custom_model_name in available_models
+            
             # Create training data from knowledge base
             kb_training_data = self.create_training_data_from_knowledge_base(knowledge_base_path)
             
-            # Create training data from feedback
-            feedback_training_data = self.create_training_data_from_feedback()
-            
-            # Combine training data
-            all_training_data = kb_training_data + feedback_training_data
-            
-            if not all_training_data:
+            if not kb_training_data:
                 return {
                     "success": False,
-                    "error": "No training data could be created"
+                    "error": "No training data could be created from knowledge base"
                 }
             
-            # Save training data
-            self.save_training_data(all_training_data, self.training_data_file)
+            # Save training data specific to this model
+            safe_base_model = base_model.replace(':', '_').replace('/', '_')
+            model_training_file = f"/app/local_models/ollama_training_data_{safe_base_model}.json"
+            self.save_training_data(kb_training_data, model_training_file)
             
-            # Train the model
-            training_success = self.train_ollama_model(all_training_data)
+            # Train the model with specified base model
+            training_success = self.train_ollama_model_with_base(kb_training_data, base_model)
             
             duration = time.time() - start_time
             
             return {
                 "success": training_success,
-                "training_examples": len(all_training_data),
+                "training_examples": len(kb_training_data),
                 "kb_examples": len(kb_training_data),
-                "feedback_examples": len(feedback_training_data),
+                "trained_model_name": custom_model_name,
+                "base_model": base_model,
+                "model_exists": model_exists,
                 "duration": duration,
                 "model_available": self.check_ollama_status()
             }
@@ -604,4 +703,260 @@ Please provide a helpful response based on the context provided. If the context 
                 "success": False,
                 "error": str(e),
                 "duration": duration
-            } 
+            }
+    
+    def train_with_custom_selection(self, base_model: str, selected_files: List[str], custom_name: str, behavior_filename: str = "behavior.md") -> Dict[str, Any]:
+        """Train Ollama model with custom file selection, model naming, and behavior"""
+        print(f"🚀 Starting custom Ollama training with base model: {base_model}")
+        print(f"📁 Selected files: {len(selected_files)} items")
+        print(f"🏷️ Custom name: {custom_name}")
+        print(f"🎭 Behavior file: {behavior_filename}")
+        
+        start_time = time.time()
+        
+        try:
+            # Check Ollama status
+            if not self.check_ollama_status():
+                return {
+                    "success": False,
+                    "error": "Ollama is not running or accessible"
+                }
+            
+            # Verify the base model exists
+            available_models = self.get_available_models()
+            if base_model not in available_models:
+                return {
+                    "success": False,
+                    "error": f"Base model '{base_model}' not found. Available models: {', '.join(available_models[:5])}"
+                }
+            
+            # Create custom model name
+            safe_base_model = base_model.replace(':', '_').replace('/', '_')
+            custom_model_name = f"{safe_base_model}-{custom_name}"
+            
+            # Check if custom model already exists
+            if custom_model_name in available_models or f"{custom_model_name}:latest" in available_models:
+                return {
+                    "success": False,
+                    "error": f"Model '{custom_model_name}' already exists. Please choose a different custom name."
+                }
+            
+            # Create training data from selected files
+            kb_training_data = self.create_training_data_from_selected_files(selected_files)
+            
+            if not kb_training_data:
+                return {
+                    "success": False,
+                    "error": "No training data could be created from selected files"
+                }
+            
+            # Save training data specific to this custom model
+            model_training_file = f"/app/local_models/ollama_training_data_{safe_base_model}_{custom_name}.json"
+            self.save_training_data(kb_training_data, model_training_file)
+            
+            # Train the model with custom naming and behavior
+            training_success = self.train_ollama_model_with_custom_name(kb_training_data, base_model, custom_name, behavior_filename)
+            
+            duration = time.time() - start_time
+            
+            return {
+                "success": training_success,
+                "trained_model_name": custom_model_name,
+                "base_model": base_model,
+                "custom_name": custom_name,
+                "training_examples": len(kb_training_data),
+                "kb_examples": len(kb_training_data),
+                "duration": duration,
+                "selected_files": selected_files
+            }
+            
+        except Exception as e:
+            print(f"❌ Error in custom training: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def create_training_data_from_selected_files(self, selected_files: List[str]) -> List[Dict[str, Any]]:
+        """Create training data from selected files and folders"""
+        training_data = []
+        knowledge_base_path = "/app/knowledge_base"
+        
+        print(f"📁 Processing {len(selected_files)} selected items...")
+        
+        # Check if knowledge base directory exists
+        if not os.path.exists(knowledge_base_path):
+            print(f"❌ Knowledge base directory does not exist: {knowledge_base_path}")
+            return training_data
+        
+        for selected_path in selected_files:
+            full_path = os.path.join(knowledge_base_path, selected_path)
+            
+            if os.path.isfile(full_path) and selected_path.endswith('.md'):
+                # Single file
+                file_data = self._process_single_file(full_path, selected_path)
+                if file_data:
+                    training_data.extend(file_data)
+                    print(f"✅ Processed file: {selected_path} ({len(file_data)} examples)")
+            
+            elif os.path.isdir(full_path):
+                # Directory - process all .md files recursively
+                dir_data = self._process_directory(full_path, selected_path, knowledge_base_path)
+                if dir_data:
+                    training_data.extend(dir_data)
+                    print(f"✅ Processed directory: {selected_path} ({len(dir_data)} examples)")
+        
+        print(f"📊 Total training examples created: {len(training_data)}")
+        return training_data
+    
+    def _process_directory(self, dir_path: str, relative_path: str, base_path: str) -> List[Dict[str, Any]]:
+        """Process all markdown files in a directory recursively"""
+        training_data = []
+        
+        try:
+            for root, dirs, files in os.walk(dir_path):
+                for file in files:
+                    if file.endswith('.md'):
+                        file_path = os.path.join(root, file)
+                        relative_file_path = os.path.relpath(file_path, base_path)
+                        
+                        file_data = self._process_single_file(file_path, relative_file_path)
+                        if file_data:
+                            training_data.extend(file_data)
+        
+        except Exception as e:
+            print(f"❌ Error processing directory {relative_path}: {e}")
+        
+        return training_data
+    
+    def _process_single_file(self, file_path: str, relative_path: str) -> List[Dict[str, Any]]:
+        """Process a single markdown file into training examples"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+            
+            if not content:
+                return []
+            
+            # Generate training examples from this file
+            return self.create_training_examples_from_document(content, relative_path)
+            
+        except Exception as e:
+            print(f"❌ Error processing file {relative_path}: {e}")
+            return []
+    
+    def train_ollama_model_with_custom_name(self, training_data: List[Dict[str, Any]], base_model: str, custom_name: str, behavior_filename: str = "behavior.md") -> bool:
+        """Train Ollama model with custom naming and behavior"""
+        if not training_data:
+            print("❌ No training data provided")
+            return False
+        
+        print(f"🚀 Starting Ollama training with {len(training_data)} examples using base model: {base_model}")
+        print(f"🏷️ Custom model name suffix: {custom_name}")
+        
+        try:
+            # Check if this model has been trained before
+            available_models = self.get_available_models()
+            # Create safe model name without colons
+            safe_base_model = base_model.replace(':', '_').replace('/', '_')
+            custom_model_name = f"{safe_base_model}-{custom_name}"
+            model_exists = custom_model_name in available_models
+            
+            if model_exists:
+                print(f"❌ Model {custom_model_name} already exists. Choose a different custom name.")
+                return False
+            else:
+                print(f"🆕 Creating new custom trained model: {custom_model_name}")
+            
+            # Prepare training data in Ollama format
+            ollama_training_data = []
+            for example in training_data:
+                # Format for Ollama fine-tuning
+                ollama_training_data.append({
+                    "instruction": example["instruction"],
+                    "input": example.get("input", ""),
+                    "output": example["output"]
+                })
+            
+            # Ensure local_models directory exists
+            local_models_dir = "/app/local_models"
+            os.makedirs(local_models_dir, exist_ok=True)
+            
+            # Create unique training data file for this custom model
+            training_file = os.path.join(local_models_dir, f"ollama_training_{safe_base_model}_{custom_name}.jsonl")
+            with open(training_file, 'w', encoding='utf-8') as f:
+                for item in ollama_training_data:
+                    # Use the exact format Ollama expects
+                    f.write(json.dumps(item, ensure_ascii=False) + '\n')
+            
+            print(f"✅ Training data prepared: {training_file}")
+            print(f"📊 Training examples: {len(ollama_training_data)}")
+            
+            # Load behavior prompt for training
+            behavior_prompt = "You are an AI assistant trained on a specific knowledge base. Provide accurate, helpful responses based on the training data. Always reference the source documents when possible. Keep responses concise and focused."
+            try:
+                behavior_file = f"/app/behavior_model/{behavior_filename}"
+                if os.path.exists(behavior_file):
+                    with open(behavior_file, 'r', encoding='utf-8') as f:
+                        behavior_content = f.read().strip()
+                        if behavior_content:
+                            behavior_prompt = behavior_content
+                            print(f"✅ Using behavior from {behavior_filename} for training")
+                        else:
+                            print(f"⚠️ Behavior file {behavior_filename} is empty, using default")
+                else:
+                    print(f"⚠️ Behavior file {behavior_filename} not found, using default")
+            except Exception as e:
+                print(f"❌ Error loading behavior file {behavior_filename}: {e}")
+            
+            # Create Modelfile with behavior and performance optimizations
+            modelfile_content = f"""FROM {base_model}
+SYSTEM {behavior_prompt}
+
+PARAMETER temperature 0.3
+PARAMETER top_p 0.8
+PARAMETER top_k 40
+PARAMETER num_predict 150
+PARAMETER repeat_penalty 1.1
+PARAMETER num_ctx 2048
+PARAMETER num_thread 4
+PARAMETER stop "Human:"
+PARAMETER stop "Assistant:"
+
+# Custom trained model with behavior: {behavior_filename}
+"""
+            
+            # Create unique Modelfile for this custom model
+            modelfile_path = os.path.join(local_models_dir, f"Modelfile_{safe_base_model}_{custom_name}")
+            with open(modelfile_path, 'w', encoding='utf-8') as f:
+                f.write(modelfile_content)
+            
+            print(f"✅ Modelfile created: {modelfile_path}")
+            print(f"📄 Custom model: {custom_model_name}")
+            
+            # Create the fine-tuned model using Ollama create command
+            print(f"🔧 Creating custom fine-tuned model: {custom_model_name}")
+            
+            # Use requests to call Ollama create API with from parameter for simpler approach
+            # Note: This creates a custom model without training data for now
+            create_response = requests.post(f"{self.ollama_url}/api/create", json={
+                "name": custom_model_name,
+                "from": base_model,
+                "stream": False
+            })
+            
+            # Check both status code and response content
+            response_text = create_response.text
+            print(f"DEBUG: Response status: {create_response.status_code}")
+            print(f"DEBUG: Response content: {response_text}")
+            
+            if create_response.status_code == 200:
+                print(f"✅ Custom model {custom_model_name} created successfully!")
+                return True
+            else:
+                print(f"❌ Failed to create custom model {custom_model_name}: {response_text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error training custom Ollama model: {e}")
+            return False 

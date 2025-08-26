@@ -114,28 +114,7 @@ const FeedbackButton: React.FC<FeedbackButtonProps> = ({
     return insights;
   };
 
-  const handleRetrain = async () => {
-    try {
-      const response = await fetch('http://localhost:5557/train', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'train_knowledge_base'
-        }),
-      });
 
-      if (response.ok) {
-        alert('✅ Knowledge base retrained with your feedback! The system has learned from your input and will provide better responses in the future.');
-      } else {
-        alert('❌ Failed to retrain. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error retraining:', error);
-      alert('❌ Error during retraining. Please try again.');
-    }
-  };
 
   return (
     <>
@@ -256,23 +235,12 @@ const FeedbackButton: React.FC<FeedbackButtonProps> = ({
 
                 <div className="space-y-3">
                   <button
-                    onClick={handleRetrain}
-                    className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                  >
-                    🔄 Retrain Now with My Feedback
-                  </button>
-                  
-                  <button
                     onClick={() => setShowModal(false)}
                     className="w-full px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
                   >
                     Close
                   </button>
                 </div>
-                
-                <p className="text-xs text-gray-500 mt-4">
-                  💡 Tip: Retraining now will immediately apply your feedback to improve future responses!
-                </p>
               </div>
             )}
           </div>

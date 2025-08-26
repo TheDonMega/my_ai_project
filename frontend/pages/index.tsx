@@ -1,29 +1,24 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import axios from 'axios';
 import type { Answer, Source, FullDocument } from '../types.ts';
 import DocumentModal from '../components/DocumentModal';
 import FormattedAnswer from '../components/FormattedAnswer';
-import FeedbackButton from '../components/FeedbackButton';
+// FeedbackButton removed - not used in current interface
+import ModelSelector from '../components/ModelSelector';
+import BehaviorSelector from '../components/BehaviorSelector';
+import QueryOptions from '../components/QueryOptions';
+import TrainingModal from '../components/TrainingModal';
 import styles from '../styles/Home.module.css';
 import answerStyles from '../styles/Answer.module.css';
-import stepStyles from '../styles/StepFlow.module.css';
-import { GlobalStyle } from '../styles/GlobalStyle';
-import TrainingDashboard from '../components/TrainingDashboard';
 
-interface StepState {
-  step: string;
-  prompt: string;
-  current_message?: string;
-  message_to_send?: string;
-  availableFiles?: string[];
-  display_files?: string[];
-  all_files_index?: string;
-  files_to_include?: string[];
-  selectedFiles?: string[];
-  new_message?: string;
-};
+import { GlobalStyle } from '../styles/GlobalStyle';
+
+
+;
 
 export default function Home() {
+  const router = useRouter();
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,17 +27,44 @@ export default function Home() {
   const [selectedDocument, setSelectedDocument] = useState<FullDocument | null>(null);
   const [showSections, setShowSections] = useState(true);
   const [viewingFullSource, setViewingFullSource] = useState(false);
-  const [currentStep, setCurrentStep] = useState<StepState | null>(null);
+  const [cliHistory, setCliHistory] = useState<Array<{type: 'input' | 'output', content: string, timestamp: Date}>>([]);
+  const [currentInput, setCurrentInput] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentStreamId, setCurrentStreamId] = useState<string | null>(null);
+  const [trainingCollapsed, setTrainingCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('trainingCollapsed') === 'true';
+    }
+    return false;
+  });
+  const [queryOptionsCollapsed, setQueryOptionsCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('queryOptionsCollapsed') === 'true';
+    }
+    return false;
+  });
+
+
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState<string>('');
-  const [lastTrainingTime, setLastTrainingTime] = useState<string | null>(null);
-  const [showTrainingDashboard, setShowTrainingDashboard] = useState(false);
-  const [feedbackNotification, setFeedbackNotification] = useState<{
-    show: boolean;
-    message: string;
-    type: 'success' | 'info' | 'warning';
-    insights?: string[];
-  } | null>(null);
+  // Feedback notification removed - not used in current interface
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedBehavior, setSelectedBehavior] = useState<string | null>(null);
+  const [includeFiles, setIncludeFiles] = useState<boolean>(true);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [currentSources, setCurrentSources] = useState<Source[]>([]);
+  const [showSources, setShowSources] = useState(false);
+
+  const handleBehaviorSelect = async (behaviorFilename: string) => {
+    try {
+      await axios.post('http://localhost:5557/behaviors/select', {
+        behavior_filename: behaviorFilename
+      });
+      setSelectedBehavior(behaviorFilename);
+    } catch (error) {
+      console.error('Error selecting behavior:', error);
+    }
+  };
 
   // Check server status and get document count on load
   useEffect(() => {
@@ -55,242 +77,275 @@ export default function Home() {
       }
     };
     checkStatus();
-  }, []);
+    
+    // Add welcome message to CLI history
+    const getBehaviorDisplayName = () => {
+      if (!selectedBehavior) return 'Default';
+      // Extract a readable name from the behavior filename
+      const name = selectedBehavior.replace('.md', '').replace('_', ' ').replace('-', ' ');
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    };
+
+    const welcomeMessage = `Welcome to AI Assistant Terminal v1.0.0
+
+Available commands:
+- Type any question to get an AI response
+- Press Enter to submit
+- Model: ${selectedModel || 'Auto-select'}
+- Behavior Profile: ${getBehaviorDisplayName()}
+- Files: ${includeFiles ? 'Included' : 'Not included'}
+
+Ready for your first question!`;
+
+    setCliHistory([{
+      type: 'output',
+      content: welcomeMessage,
+      timestamp: new Date()
+    }]);
+  }, [selectedModel, selectedBehavior, includeFiles]);
+
+  // Save collapse states to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('trainingCollapsed', trainingCollapsed.toString());
+    }
+  }, [trainingCollapsed]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('queryOptionsCollapsed', queryOptionsCollapsed.toString());
+    }
+  }, [queryOptionsCollapsed]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // This will be replaced by separate handlers
   };
 
-  const handleAIAnalysis = async () => {
-    if (!question.trim()) return;
-    
-    setLoading(true);
-    setAnswer(null);
-    setProcessingStep('Starting AI analysis...');
-    
-    try {
-      const response = await axios.post('http://localhost:5557/ask', { 
-        question,
-        step: 'initial',
-        method: 'ai_analysis'
-      });
-      
-      if (response.data.steps) {
-        for (const step of response.data.steps) {
-          setProcessingStep(step);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      setAnswer(response.data);
-      if (response.data.next_step) {
-        setCurrentStep({
-          step: response.data.next_step,
-          prompt: response.data.prompt,
-          current_message: question
-        });
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      setAnswer({
-        answer: 'Error occurred while fetching the answer.',
-        sources: []
-      });
-    } finally {
-      setLoading(false);
-      setProcessingStep('');
-    }
-  };
 
-  const handleOllamaAnalysis = async () => {
-    if (!question.trim()) return;
+
+  const handleCliSubmit = async (input: string) => {
+    if (!input.trim()) return;
     
-    setLoading(true);
-    setAnswer(null);
-    setProcessingStep('Analyzing with Ollama...');
-    
-    try {
-      const response = await axios.post('http://localhost:5557/ask-ollama', { 
-        question
-      });
-      
-      setAnswer(response.data);
-    } catch (error) {
-      console.error('Error:', error);
-      setAnswer({
-        answer: 'Error occurred while fetching the answer from Ollama.',
-        sources: []
-      });
+    // Prevent multiple concurrent streams
+    if (isStreaming) {
+      console.log('Stream already in progress, ignoring new request');
+      return;
     }
     
-    setProcessingStep('');
-    setLoading(false);
-  };
-
-  const handleStepResponse = async (response: string) => {
-    setLoading(true);
+    // Generate unique stream ID
+    const streamId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    setCurrentStreamId(streamId);
+    
+    // Add user input to CLI history
+    const userEntry = { type: 'input' as const, content: input, timestamp: new Date() };
+    setCliHistory(prev => [...prev, userEntry]);
+    setCurrentInput('');
+    
+    // Start streaming response
+    setIsStreaming(true);
+    
+    // Clear previous sources
+    setCurrentSources([]);
+    setShowSources(false);
+    
+    // Create initial output entry for streaming
+    const outputEntry = { type: 'output' as const, content: '', timestamp: new Date() };
+    setCliHistory(prev => [...prev, outputEntry]);
     
     try {
-      if (!currentStep) return;
-
-      const requestData: any = {
-        question: currentStep.current_message,
-        step: currentStep.step,
-        confirm: response
-      };
-
-      if (currentStep.selectedFiles) {
-        requestData.selected_files = currentStep.selectedFiles;
-      }
-      if (currentStep.files_to_include) {
-        requestData.files_to_include = currentStep.files_to_include;
-      }
-      if (currentStep.new_message) {
-        requestData.new_message = currentStep.new_message;
-        requestData.message_to_send = currentStep.new_message;
-      }
-      if (currentStep.message_to_send) {
-        requestData.message_to_send = currentStep.message_to_send;
-      }
-
-      // If this is the final confirmation step and user clicked "Send Request", 
-      // immediately clear the currentStep to hide the buttons
-      if (currentStep.step === 'confirm_request' && response === 'Y') {
-        setCurrentStep(null);
-      }
-
-      const apiResponse = await axios.post('http://localhost:5557/ask', requestData);
+      console.log(`Starting stream ${streamId} for question: "${input}"`);
       
-      if (apiResponse.data.next_step) {
-        setCurrentStep({
-          ...currentStep,
-          step: apiResponse.data.next_step,
-          prompt: apiResponse.data.prompt,
-          availableFiles: apiResponse.data.available_files,
-          display_files: apiResponse.data.display_files,
-          all_files_index: apiResponse.data.all_files_index,
-          message_to_send: apiResponse.data.message_to_send,
-          files_to_include: apiResponse.data.files_to_include || currentStep.files_to_include,
-          selectedFiles: apiResponse.data.selectedFiles || currentStep.selectedFiles
-        });
-      } else {
-        // Only set answer if there's actually an answer in the response
-        if (apiResponse.data.answer) {
-          setAnswer(apiResponse.data);
-        }
-        setCurrentStep(null);
+      const response = await fetch('http://localhost:5557/query-with-model-stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          question: input,
+          include_files: includeFiles,
+          model_name: selectedModel
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    } catch (error) {
-      console.error('Error:', error);
-      setAnswer({
-        answer: 'Error occurred while processing the request.',
-        sources: []
-      });
-      setCurrentStep(null);
-    }
-    
-    setLoading(false);
-  };
 
-  const handleFileSelection = (selectedIndexes: string) => {
-    const availableFiles = currentStep?.availableFiles;
-    const allFilesIndex = currentStep?.all_files_index;
-    if (!availableFiles?.length || !allFilesIndex) return;
-    
-    let selectedFiles: string[] = [];
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No reader available');
+      }
 
-    // Check if "All" option is selected
-    if (selectedIndexes.split(',').map(i => i.trim()).includes(allFilesIndex)) {
-      selectedFiles = availableFiles;
-    } else {
-      // Handle individual file selection
-      selectedFiles = selectedIndexes.split(',').map(index => {
-        const i = parseInt(index.trim()) - 1;
-        return i >= 0 && i < availableFiles.length 
-          ? availableFiles[i] 
-          : null;
-      }).filter((file): file is string => file !== null);
-    }
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamComplete = false;
+      let responseLength = 0;
 
-    if (!currentStep) return;
-    setCurrentStep({
-      ...currentStep,
-      selectedFiles: selectedFiles,
-      files_to_include: selectedFiles  // Always set both fields
-    });
-  };
-
-  const handleQuestionModification = (newQuestion: string) => {
-    if (!currentStep) return;
-    
-    setCurrentStep({
-      ...currentStep,
-      new_message: newQuestion
-    });
-  };
-
-  const handleTraining = async () => {
-    setIsTraining(true);
-    setTrainingProgress('Starting knowledge base training...');
-    
-    try {
-      // Call the training endpoint
-      const response = await axios.post('http://localhost:5557/train', {
-        action: 'train_knowledge_base'
-      });
-      
-      if (response.data.success) {
-        setTrainingProgress('Training completed successfully!');
-        setLastTrainingTime(new Date().toLocaleString());
+      while (!streamComplete) {
+        const { done, value } = await reader.read();
         
-        // Update document count if provided
-        if (response.data.documents_processed) {
-          setDocumentsLoaded(response.data.documents_processed);
+        if (done) {
+          console.log(`Stream ${streamId} reader done, processing final buffer`);
+          // Process any remaining data in buffer before breaking
+          if (buffer.trim()) {
+            const lines = buffer.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.response) {
+                    setCliHistory(prev => {
+                      const newHistory = [...prev];
+                      const lastEntry = newHistory[newHistory.length - 1];
+                      if (lastEntry && lastEntry.type === 'output') {
+                        const unescapedResponse = data.response
+                          .replace(/\\"/g, '"')
+                          .replace(/\\n/g, '\n');
+                        lastEntry.content += unescapedResponse;
+                        responseLength += unescapedResponse.length;
+                      }
+                      return newHistory;
+                    });
+                  }
+                } catch (e) {
+                  console.error('Error parsing final buffer data:', e, 'Line:', line);
+                }
+              }
+            }
+          }
+          break;
         }
         
-        // Show success message for a few seconds
-        setTimeout(() => {
-          setTrainingProgress('');
-        }, 3000);
-      } else {
-        setTrainingProgress('Training failed: ' + (response.data.error || 'Unknown error'));
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.error) {
+                console.log(`Stream ${streamId} error: ${data.error}`);
+                setCliHistory(prev => {
+                  const newHistory = [...prev];
+                  const lastEntry = newHistory[newHistory.length - 1];
+                  if (lastEntry && lastEntry.type === 'output') {
+                    lastEntry.content = `Error: ${data.error}`;
+                  }
+                  return newHistory;
+                });
+                streamComplete = true;
+                break;
+              }
+              
+              // Capture sources from the first metadata message
+              if (data.sources && data.model_used) {
+                console.log('Sources data received:', data.sources);
+                console.log('Sources filenames:', data.sources.map((s: any) => s.filename));
+                setCurrentSources(data.sources);
+                setShowSources(data.sources.length > 0);
+                console.log(`Found ${data.sources.length} sources for query`);
+              }
+              
+              if (data.response) {
+                // Update the last output entry incrementally
+                setCliHistory(prev => {
+                  const newHistory = [...prev];
+                  const lastEntry = newHistory[newHistory.length - 1];
+                  if (lastEntry && lastEntry.type === 'output') {
+                    // Unescape the response text
+                    const unescapedResponse = data.response
+                      .replace(/\\"/g, '"')
+                      .replace(/\\n/g, '\n');
+                    lastEntry.content += unescapedResponse;
+                    responseLength += unescapedResponse.length;
+                  }
+                  return newHistory;
+                });
+                
+                // Small delay to make streaming more visible
+                await new Promise(resolve => setTimeout(resolve, 10));
+              }
+              
+              if (data.done) {
+                console.log(`Stream ${streamId} completed, total response length: ${responseLength} characters`);
+                streamComplete = true;
+                break;
+              }
+            } catch (e) {
+              console.error('Error parsing streaming data:', e, 'Line:', line);
+            }
+          }
+        }
+        
+        if (streamComplete) break;
       }
+      
     } catch (error) {
-      console.error('Training error:', error);
-      setTrainingProgress('Training failed: ' + (error as any).message);
-    } finally {
-      setTimeout(() => {
-        setIsTraining(false);
-        setTrainingProgress('');
-      }, 2000);
+      console.error(`Stream ${streamId} error:`, error);
+      setCliHistory(prev => {
+        const newHistory = [...prev];
+        const lastEntry = newHistory[newHistory.length - 1];
+        if (lastEntry && lastEntry.type === 'output') {
+          lastEntry.content = 'Error occurred while streaming from model.';
+        }
+        return newHistory;
+      });
+    }
+    
+    setIsStreaming(false);
+    setCurrentStreamId(null);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (currentInput.trim() && !isStreaming) {
+        handleCliSubmit(currentInput);
+      }
     }
   };
 
   const handleOllamaTraining = async () => {
+    // Open the training modal directly
+    setShowTrainingModal(true);
+  };
+
+  const handleViewDocument = async (filename: string) => {
+    try {
+      const response = await axios.get(`http://localhost:5557/document/${encodeURIComponent(filename)}`);
+      const fullDocument: FullDocument = {
+        filename,
+        content: response.data.content
+      };
+      setSelectedDocument(fullDocument);
+    } catch (error) {
+      console.error('Error fetching document:', error);
+    }
+  };
+
+  const handleTrainingStart = async (trainingData: any) => {
     setIsTraining(true);
-    setTrainingProgress('Starting Ollama model training...');
+    setTrainingProgress(`Starting custom training with ${trainingData.selected_files.length} files...`);
     
     try {
-      // Call the Ollama training endpoint
-      const response = await axios.post('http://localhost:5557/train-ollama', {
-        action: 'train_ollama'
-      });
+      const response = await axios.post('http://localhost:5557/train-ollama', trainingData);
       
       if (response.data.success) {
-        setTrainingProgress(`Ollama training completed! Created ${response.data.training_examples} training examples.`);
-        setLastTrainingTime(new Date().toLocaleString());
+        setTrainingProgress(`✅ Custom training completed! Model: ${response.data.trained_model} (${response.data.training_examples} examples)`);
         
         // Show success message for a few seconds
         setTimeout(() => {
           setTrainingProgress('');
-        }, 5000);
+        }, 8000);
       } else {
-        setTrainingProgress('Ollama training failed: ' + (response.data.error || 'Unknown error'));
+        setTrainingProgress('❌ Training failed: ' + (response.data.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Ollama training error:', error);
-      setTrainingProgress('Ollama training failed: ' + (error as any).message);
+      console.error('Training error:', error);
+      setTrainingProgress('❌ Training failed: ' + (error as any).message);
     } finally {
       setTimeout(() => {
         setIsTraining(false);
@@ -301,395 +356,213 @@ export default function Home() {
 
   return (
     <div className={styles.container}>
-      <h1>AI Knowledge Base Assistant</h1>
-      
-      {/* Feedback Notification */}
-      {feedbackNotification && feedbackNotification.show && (
-        <div className={`mb-4 p-4 rounded-lg border ${
-          feedbackNotification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
-          feedbackNotification.type === 'warning' ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
-          'bg-blue-50 border-blue-200 text-blue-800'
-        }`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-medium mb-2">{feedbackNotification.message}</h3>
-              {feedbackNotification.insights && feedbackNotification.insights.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-sm font-medium mb-2">How the system will learn:</p>
-                  <ul className="space-y-1">
-                    {feedbackNotification.insights.map((insight, index) => (
-                      <li key={index} className="text-sm flex items-start">
-                        <span className="mr-2">•</span>
-                        {insight}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={() => setFeedbackNotification(null)}
-              className="ml-4 text-gray-400 hover:text-gray-600"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-      
-      <div className={styles.navigation}>
-        <a href="/feedback" className={styles.navLink}>
-          📊 View Feedback Analytics
-        </a>
+      <div className={styles.header}>
+        <h1>AI Knowledge Base Assistant</h1>
+        <button 
+          onClick={() => router.push('/convert-docx')}
+          className={styles.convertButton}
+        >
+          📄 Convert Notes to Markdown
+        </button>
       </div>
+      
+      {/* Feedback notification removed - not used in current interface */}
+      
+
       
       {documentsLoaded !== null && (
         <div className={styles.status}>
           <p>Knowledge base loaded with {documentsLoaded} documents</p>
-          {lastTrainingTime && (
-            <p className={styles.lastTraining}>Last trained: {lastTrainingTime}</p>
-          )}
         </div>
       )}
 
-      {/* Training Section */}
-      <div className={styles.trainingSection}>
-        <div className={styles.trainingHeader}>
-          <h3>Knowledge Base Training</h3>
-          <div className={styles.trainingButtons}>
-            <button 
-              onClick={handleTraining}
-              disabled={isTraining}
-              className={styles.trainingButton}
-            >
-              {isTraining ? 'Training...' : '🔄 Train Knowledge Base'}
-            </button>
-            <button 
-              onClick={handleOllamaTraining}
-              disabled={isTraining}
-              className={styles.trainingButton}
-            >
-              {isTraining ? 'Training...' : '🔄 Train Ollama Model'}
-            </button>
-            <button 
-              onClick={() => setShowTrainingDashboard(!showTrainingDashboard)}
-              className={styles.dashboardButton}
-            >
-              📊 Training Dashboard
-            </button>
-          </div>
-        </div>
-        
-        {isTraining && (
-          <div className={styles.trainingProgress}>
-            <div className={styles.progressBar}>
-              <div className={styles.progressFill}></div>
-            </div>
-            <p>{trainingProgress}</p>
-          </div>
-        )}
-        
-        <div className={styles.trainingInfo}>
-          <p>Training helps the AI understand your knowledge base better and improves search accuracy.</p>
-          <ul>
-            <li>📊 Indexes all documents for faster search</li>
-            <li>🎯 Improves relevance scoring</li>
-            <li>🧠 Creates semantic embeddings for better understanding</li>
-            <li>📈 Tracks changes and updates automatically</li>
-          </ul>
-        </div>
-      </div>
-      
-      {/* Training Dashboard */}
-      {showTrainingDashboard && (
-        <div className={styles.dashboardContainer}>
-          <TrainingDashboard />
-        </div>
-      )}
-      
-      <form className={styles.form}>
-        <textarea
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask your question here..."
-          rows={4}
-        />
-        <div className={styles.buttonContainer}>
-          <button 
-            type="button" 
-            className={styles.aiAnalysisButton} 
-            onClick={handleAIAnalysis}
-            disabled={loading || !question.trim()}
-          >
-            {loading ? 'Processing...' : 'Use AI Locally'}
-          </button>
-          <button 
-            type="button" 
-            className={styles.ollamaAnalysisButton} 
-            onClick={handleOllamaAnalysis}
-            disabled={loading || !question.trim()}
-          >
-            {loading ? 'Processing...' : 'Use Ollama Locally'}
-          </button>
-        </div>
-      </form>
-
-      {processingStep && (
-        <div className={styles.processing}>
-          <p>{processingStep}</p>
-          <div className={styles.loadingDots}></div>
-        </div>
-      )}
-
-      {currentStep && (
-        <div className={stepStyles.stepPrompt}>
-          <h3>{currentStep.prompt}</h3>
-          
-          {currentStep.step === 'ask_ai' && (
-            <div className={stepStyles.stepButtons}>
-              <button onClick={() => handleStepResponse('Y')}>Yes</button>
-              <button onClick={() => handleStepResponse('N')}>No</button>
-            </div>
-          )}
-
-          {currentStep.step === 'select_markdown' && (
-            <div className={stepStyles.stepButtons}>
-              <button onClick={() => handleStepResponse('Y')}>Yes</button>
-              <button onClick={() => handleStepResponse('N')}>No</button>
-            </div>
-          )}
-
-          {/* Message modification prompt */}
-          {currentStep.step === 'ask_modify_message' && (
-            <div className={stepStyles.promptSection}>
-              <p>{currentStep.prompt}</p>
-              <div className={stepStyles.buttonContainer}>
-                <button onClick={() => handleStepResponse('Y')} className={stepStyles.yesButton}>Yes, Update</button>
-                <button onClick={() => handleStepResponse('N')} className={stepStyles.noButton}>No, Keep Current</button>
+                {/* Ollama Training Section */}
+          <div className={styles.trainingSection}>
+            <div className={styles.trainingHeader}>
+              <div className={styles.trainingTitle}>
+                <button 
+                  onClick={() => setTrainingCollapsed(!trainingCollapsed)}
+                  className={styles.collapseButton}
+                  title={trainingCollapsed ? "Expand training section" : "Collapse training section"}
+                >
+                  <span className={`${styles.collapseIcon} ${trainingCollapsed ? styles.collapsed : ''}`}>
+                    ▼
+                  </span>
+                </button>
+                <h3>Ollama Model Training</h3>
               </div>
+              <button 
+                onClick={handleOllamaTraining}
+                disabled={isTraining}
+                className={styles.trainingButton}
+              >
+                {isTraining ? 'Training...' : '🎓 Train Custom Model'}
+              </button>
             </div>
-          )}
-
-          {/* Enter new message */}
-          {currentStep.step === 'enter_new_message' && (
-            <div className={stepStyles.promptSection}>
-              <p>{currentStep.prompt}</p>
-              <div className={stepStyles.messagePreview}>
-                <p>Current message:</p>
-                <pre>{currentStep.current_message}</pre>
-              </div>
-              <div className={stepStyles.messageEdit}>
-                <p>New message:</p>
-                <textarea
-                  defaultValue={currentStep.current_message}
-                  onChange={(e) => setCurrentStep({
-                    ...currentStep,
-                    new_message: e.target.value,
-                    message_to_send: e.target.value
-                  })}
-                  className={stepStyles.messageInput}
-                  rows={4}
-                />
-              </div>
-              <div className={stepStyles.buttonContainer}>
-                <button onClick={() => handleStepResponse('continue')} className={stepStyles.submitButton}>Submit</button>
-              </div>
-            </div>
-          )}
-
-          {/* Include markdown prompt */}
-          {currentStep.step === 'ask_include_markdown' && (
-            <div className={stepStyles.promptSection}>
-              <p>{currentStep.prompt}</p>
-              <div className={stepStyles.buttonContainer}>
-                <button onClick={() => handleStepResponse('Y')} className={stepStyles.yesButton}>Yes</button>
-                <button onClick={() => handleStepResponse('N')} className={stepStyles.noButton}>No</button>
-              </div>
-            </div>
-          )}
-
-          {/* File selection */}
-          {currentStep.step === 'select_markdown_files' && currentStep.availableFiles && (
-            <div className={stepStyles.fileSelection}>
-              <p>Available files:</p>
-              <ul>
-                {currentStep.display_files?.map((file, index) => (
-                  <li key={index}>{file}</li>
-                ))}
-              </ul>
-              <input
-                type="text"
-                placeholder="Enter file numbers (e.g., 1,2,3 or 4 for all)"
-                onChange={(e) => handleFileSelection(e.target.value)}
-                className={stepStyles.fileInput}
-              />
-              <div className={stepStyles.buttonContainer}>
-                <button onClick={() => handleStepResponse('Y')} className={stepStyles.submitButton}>Continue</button>
-              </div>
-            </div>
-          )}
-
-          {currentStep.step === 'confirm_question' && (
-            <div className={stepStyles.questionModification}>
-              <p>Current question:</p>
-              <pre>{currentStep.current_message}</pre>
-              <textarea
-                defaultValue={currentStep.current_message}
-                onChange={(e) => handleQuestionModification(e.target.value)}
-                rows={4}
-                className={stepStyles.questionInput}
-              />
-              <div className={stepStyles.stepButtons}>
-                <button onClick={() => handleStepResponse('continue')}>Continue with modified question</button>
-                <button onClick={() => handleStepResponse('original')}>Use original question</button>
-              </div>
-            </div>
-          )}
-
-          {/* Final confirmation */}
-          {currentStep.step === 'confirm_request' && (
-            <div className={stepStyles.confirmationSection}>
-              <h3>{currentStep.prompt}</h3>
-              <div className={stepStyles.requestPreview}>
-                <p><strong>Message to send:</strong></p>
-                <pre>{currentStep.message_to_send || currentStep.current_message}</pre>
-                
-                {currentStep.files_to_include && currentStep.files_to_include.length > 0 && (
-                  <>
-                    <p><strong>Files to include:</strong></p>
-                    <ul>
-                      {currentStep.files_to_include.map((file, index) => (
-                        <li key={index}>{file}</li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-              <div className={stepStyles.buttonContainer}>
-                <button onClick={() => handleStepResponse('Y')} className={stepStyles.submitButton}>Send Request</button>
-                <button onClick={() => handleStepResponse('N')} className={stepStyles.noButton}>Cancel</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {answer && (
-        <div className={answerStyles.answer}>
-          <h2>Answer:</h2>
-          
-          {/* AI Status Indicator */}
-          {answer.ai_used !== undefined && (
-            <div className={`${answerStyles.aiStatus} ${answer.ai_used ? answerStyles.aiSuccess : answerStyles.aiFallback}`}>
-              {answer.ai_used ? (
-                <div>
-                  <span>🤖 AI Generated Response</span>
-                  <span className={answerStyles.method}>Method: {answer.method}</span>
+            
+            <div className={`${styles.trainingContent} ${trainingCollapsed ? styles.collapsed : ''}`}>
+              {isTraining && (
+                <div className={styles.trainingProgress}>
+                  <div className={styles.progressBar}>
+                    <div className={styles.progressFill}></div>
+                  </div>
+                  <p>{trainingProgress}</p>
                 </div>
-              ) : (
-                <div>
-                  <span>⚠️ Local Search Fallback</span>
-                  <span className={answerStyles.method}>Method: {answer.method}</span>
-                  {answer.fallback_reason && (
-                    <span className={answerStyles.fallbackReason}>Reason: {answer.fallback_reason}</span>
-                  )}
+              )}
+              
+              <div className={styles.trainingInfo}>
+                <p>Create custom models with selective training:</p>
+                <ul>
+                  <li>🤖 <strong>Select base model</strong> from available models</li>
+                  <li>📁 <strong>Choose specific files/folders</strong> from your knowledge base</li>
+                  <li>🏷️ <strong>Custom model naming</strong> (e.g., technical-docs, customer-support)</li>
+                  <li>🧠 Improves response quality for selected content</li>
+                  <li>🎯 Each model has independent training data</li>
+                  <li>⚡ Creates domain-specific AI assistants</li>
+                  <li>✅ <strong>All-in-one interface</strong> - no need to pre-select model!</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+      {/* Model Selection */}
+      <ModelSelector
+        onModelSelect={setSelectedModel}
+        selectedModel={selectedModel}
+        disabled={loading}
+      />
+
+      {/* Behavior Selection */}
+      <BehaviorSelector
+        onBehaviorSelect={handleBehaviorSelect}
+        selectedBehavior={selectedBehavior}
+        disabled={loading}
+      />
+
+      {/* Query Options */}
+      <QueryOptions
+        includeFiles={includeFiles}
+        onIncludeFilesChange={setIncludeFiles}
+        selectedModel={selectedModel}
+        disabled={loading}
+        collapsed={queryOptionsCollapsed}
+        onToggleCollapse={() => setQueryOptionsCollapsed(!queryOptionsCollapsed)}
+      />
+      
+      {/* CLI Interface */}
+      <div className={styles.cliContainer}>
+        <div className={styles.cliHeader}>
+          <span className={styles.cliPrompt}>$</span>
+          <span className={styles.cliTitle}>AI Assistant Terminal</span>
+          <div className={styles.cliStatus}>
+            <span className={styles.cliStatusItem}>
+              🎭 {selectedBehavior ? selectedBehavior.replace('.md', '').replace('_', ' ').replace('-', ' ') : 'Default'}
+            </span>
+            <span className={styles.cliStatusItem}>
+              🤖 {selectedModel || 'Auto-select'}
+            </span>
+            <span className={styles.cliStatusItem}>
+              📁 {includeFiles ? 'Files' : 'No Files'}
+            </span>
+          </div>
+        </div>
+        
+        <div className={styles.cliOutput}>
+          {cliHistory.map((entry, index) => (
+            <div key={index} className={`${styles.cliEntry} ${styles[entry.type]}`}>
+              {entry.type === 'input' && (
+                <div className={styles.cliInput}>
+                  <span className={styles.cliPrompt}>$</span>
+                  <span className={styles.cliCommand}>{entry.content}</span>
+                </div>
+              )}
+              {entry.type === 'output' && (
+                <div className={styles.cliOutput}>
+                  <pre className={styles.cliResponse}>{entry.content}</pre>
                 </div>
               )}
             </div>
-          )}
+          ))}
           
-          <FormattedAnswer answer={answer.answer} />
-          
-          {answer.sources && answer.sources.length > 0 && (
-            <div className={answerStyles.sources}>
-              <div className={answerStyles.sourcesHeader}>
-                <h3>Sources:</h3>
-                <button 
-                  onClick={() => setShowSections(!showSections)}
-                  className={answerStyles.toggleButton}
-                >
-                  {showSections ? 'Hide Sections' : 'Show Sections'}
-                </button>
-              </div>
-              
-              <div className={`${answerStyles.sourcesList} ${!showSections ? answerStyles.collapsed : ''}`}>
-                {answer.sources.map((source: Source, index: number) => (
-                  <div key={index} className={answerStyles.sourceItem}>
-                    <div className={answerStyles.sourceHeader}>
-                      <strong>
-                        {source.folder_path && source.folder_path !== 'root' 
-                          ? `${source.folder_path}/${source.filename.split('/').pop()}`
-                          : source.filename
-                        }
-                      </strong> 
-                      {source.folder_path && source.folder_path !== 'root' && (
-                        <span className={answerStyles.folderPath}> (in {source.folder_path})</span>
-                      )}
-                      {source.header && <span> - {source.header}</span>}
-                      <span className={answerStyles.relevance}>Relevance: {source.relevance}%</span>
-                    </div>
-                    
-                    {showSections && (
-                      <div className={answerStyles.sourceContent}>
-                        <pre>{source.content}</pre>
-                        {source.full_document_available && (
-                          <button
-                            className={answerStyles.viewFullButton}
-                            onClick={async () => {
-                              const response = await axios.get(`http://localhost:5557/document/${source.filename}`);
-                              setSelectedDocument(response.data);
-                            }}
-                          >
-                            View Full Document
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+          {isStreaming && (
+            <div className={styles.cliEntry}>
+              <div className={styles.cliOutput}>
+                <span className={styles.cliCursor}>▋</span>
               </div>
             </div>
           )}
-          
-          {answer.notice && (
-            <div className={answerStyles.notice}>
-              <p>{answer.notice}</p>
-            </div>
-          )}
-
-          {/* Feedback Button */}
-          <FeedbackButton
-            userQuestion={question}
-            aiResponse={answer.answer}
-            searchMethod={answer.method || 'unknown'}
-            sourcesUsed={answer.sources ? answer.sources.map(s => s.filename) : []}
-            relevanceScore={answer.sources && answer.sources.length > 0 
-              ? answer.sources.reduce((sum, s) => sum + (s.relevance || 0), 0) / answer.sources.length / 100
-              : 0
-            }
-            onFeedbackSubmitted={(insights) => {
-              setFeedbackNotification({
-                show: true,
-                message: '🎉 Feedback submitted! The system will learn from your input.',
-                type: 'success',
-                insights: insights
-              });
-              
-              // Auto-hide after 8 seconds
-              setTimeout(() => {
-                setFeedbackNotification(null);
-              }, 8000);
-            }}
+        </div>
+        
+        <div className={styles.cliInputContainer}>
+          <span className={styles.cliPrompt}>$</span>
+          <input
+            type="text"
+            value={currentInput}
+            onChange={(e) => setCurrentInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Type your question and press Enter..."
+            className={styles.cliInputField}
+            disabled={isStreaming}
           />
         </div>
+      </div>
+
+      {/* Sources Display */}
+      {showSources && currentSources.length > 0 && (
+        <div className={styles.sourcesContainer}>
+          <div className={styles.sourcesHeader}>
+            <h3>📁 Sources Found ({currentSources.length})</h3>
+            <p>Files used to generate the response above:</p>
+          </div>
+          <div className={styles.sourcesList}>
+            {currentSources.map((source, index) => (
+              <div key={index} className={styles.sourceItem}>
+                <div className={styles.sourceHeader}>
+                  <div className={styles.sourceInfo}>
+                    <span className={styles.sourceFilename}>{source.filename}</span>
+                    {source.folder_path && (
+                      <span className={styles.sourceFolder}>📁 {source.folder_path}</span>
+                    )}
+                    <span className={styles.sourceRelevance}>🎯 {source.relevance}% relevant</span>
+                  </div>
+                  <button
+                    onClick={() => handleViewDocument(source.filename)}
+                    className={styles.viewButton}
+                  >
+                    👁️ View Full File
+                  </button>
+                </div>
+                <div className={styles.sourceContent}>
+                  <div className={styles.sourceSection}>
+                    <strong>Section:</strong> {source.header || 'No header'}
+                  </div>
+                  <div className={styles.sourcePreview}>
+                    <strong>Preview:</strong> {source.content.substring(0, 200)}
+                    {source.content.length > 200 && '...'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
-      
-      <DocumentModal 
-        document={selectedDocument}
-        onClose={() => setSelectedDocument(null)}
-      />
 
+      {/* Document Modal */}
+      {selectedDocument && (
+        <DocumentModal
+          document={selectedDocument}
+          onClose={() => setSelectedDocument(null)}
+        />
+      )}
 
+      {/* Training Modal */}
+      {showTrainingModal && (
+        <TrainingModal
+          isOpen={showTrainingModal}
+          onClose={() => setShowTrainingModal(false)}
+          onTrainingStart={handleTrainingStart}
+        />
+      )}
     </div>
   );
 }

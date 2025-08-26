@@ -16,6 +16,8 @@ export interface Answer {
   ai_used?: boolean;
   fallback_used?: boolean;
   fallback_reason?: string;
+  model_used?: string;
+  include_files?: boolean;
 }
 
 export interface FullDocument {

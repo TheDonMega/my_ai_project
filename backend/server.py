@@ -1,26 +1,15 @@
 # server.py
 import os
+import json
 from dotenv import load_dotenv
 from datetime import datetime
 import time # Added for fast_llamaindex_query
 
-# Import CrewAI analyzer
-try:
-    from crewai_analyzer import get_crewai_analyzer
-    CREWAI_AVAILABLE = True
-    print("✅ CrewAI integration available")
-except ImportError as e:
-    CREWAI_AVAILABLE = False
-    print(f"⚠️  CrewAI not available: {e}")
+# CrewAI removed - using ModelManager instead
+CREWAI_AVAILABLE = False
 
-# Import feedback system
-try:
-    from feedback_system import save_user_feedback, get_feedback_insights
-    FEEDBACK_AVAILABLE = True
-    print("✅ Feedback system available")
-except ImportError as e:
-    FEEDBACK_AVAILABLE = False
-    print(f"⚠️  Feedback system not available: {e}")
+# Feedback system removed - not used in current interface
+FEEDBACK_AVAILABLE = False
 
 # Import Ollama trainer
 try:
@@ -31,14 +20,17 @@ except ImportError as e:
     OLLAMA_AVAILABLE = False
     print(f"⚠️  Ollama trainer not available: {e}")
 
-# Import LlamaIndex hybrid search system
+# Import Model Manager
 try:
-    import hybrid_search
-    HYBRID_SEARCH_AVAILABLE = True
-    print("✅ Hybrid search system available")
+    from model_manager import model_manager, ModelManager
+    MODEL_MANAGER_AVAILABLE = True
+    print("✅ Model manager available")
 except ImportError as e:
-    HYBRID_SEARCH_AVAILABLE = False
-    print(f"⚠️  Hybrid search system not available: {e}")
+    MODEL_MANAGER_AVAILABLE = False
+    print(f"⚠️  Model manager not available: {e}")
+
+# Hybrid search system removed - not used in current interface
+HYBRID_SEARCH_AVAILABLE = False
 
 # Global variables for performance optimization
 OLLAMA_AVAILABLE = False
@@ -48,18 +40,18 @@ MODEL_PRELOADED = False
 PERSONALITY_PROMPT = ""
 kb = []  # Global knowledge base variable
 
-def load_personality_prompt():
-    """Load personality/behavior prompt from behavior.md file"""
+def load_personality_prompt(behavior_filename: str = "behavior.md"):
+    """Load personality/behavior prompt from specified behavior file"""
     global PERSONALITY_PROMPT
     
     try:
-        behavior_file = "/app/knowledge_base/behavior.md"
+        behavior_file = f"/app/behavior_model/{behavior_filename}"
         if os.path.exists(behavior_file):
             with open(behavior_file, 'r', encoding='utf-8') as f:
                 PERSONALITY_PROMPT = f.read().strip()
-                print(f"✅ Loaded personality prompt from behavior.md ({len(PERSONALITY_PROMPT)} characters)")
+                print(f"✅ Loaded personality prompt from {behavior_filename} ({len(PERSONALITY_PROMPT)} characters)")
         else:
-            print("⚠️ No behavior.md file found. Using default personality.")
+            print(f"⚠️ No {behavior_filename} file found. Using default personality.")
             PERSONALITY_PROMPT = "You are a helpful AI assistant. Provide accurate, clear, and helpful responses."
     except Exception as e:
         print(f"❌ Error loading personality prompt: {e}")
@@ -107,30 +99,8 @@ try:
 except ImportError as e:
     print(f"⚠️ Ollama trainer not available: {e}")
 
-# Initialize Hybrid Search System on startup
-try:
-    if HYBRID_SEARCH_AVAILABLE:
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        embedding_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-        llm_model = os.getenv("LLM_MODEL", "llama2")
-        use_chroma = os.getenv("USE_CHROMA", "true").lower() == "true"
-        hybrid_weight = float(os.getenv("HYBRID_WEIGHT", "0.7"))
-        
-        HYBRID_SEARCH_SYSTEM = hybrid_search.HybridSearchSystem(
-            knowledge_base_path="/app/knowledge_base",
-            vector_store_path="/app/vector_store",
-            ollama_base_url=ollama_url,
-            embedding_model=embedding_model,
-            llm_model=llm_model,
-            use_chroma=use_chroma,
-            hybrid_weight=hybrid_weight
-        )
-        print("✅ Hybrid search system initialized")
-    else:
-        print("⚠️ Hybrid search system not available")
-except Exception as e:
-    print(f"⚠️ Error initializing hybrid search system: {e}")
-    HYBRID_SEARCH_SYSTEM = None
+# Hybrid search system removed - not used in current interface
+HYBRID_SEARCH_SYSTEM = None
 
 # Load personality prompt on startup
 load_personality_prompt()
@@ -181,7 +151,7 @@ def reload_knowledge_base():
     return len(kb)
 
 # --- 2. Search for Relevant Context ---
-def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased default results
+def search_knowledge_base(query, knowledge_base, num_results=5):  # Increased to 5 results for better coverage
     """
     Search for relevant sections in markdown files and extract the most relevant paragraphs.
     """
@@ -216,8 +186,7 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
     query_words = set(query.lower().split())
     results = []
     
-    # Load feedback learning data for enhanced search
-    feedback_enhancement = load_feedback_enhancement()
+    # Feedback enhancement removed - not used in current interface
     
     for doc in knowledge_base:
         # Extract folder path from filename (everything before the last '/')
@@ -233,9 +202,13 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
         # High score for filename/folder matches
         filename_match_score = 0
         if any(word in filename_lower for word in query_words):
-            filename_match_score = 10  # High priority for filename matches
+            filename_match_score = 15  # Higher priority for filename matches
         if any(word in folder_lower for word in query_words):
-            filename_match_score = 8   # High priority for folder matches
+            filename_match_score = 12   # Higher priority for folder matches
+        
+        # Extra bonus for exact folder name matches (like "QA" folder)
+        if query_lower in folder_lower or folder_lower in query_lower:
+            filename_match_score += 10  # Significant bonus for exact folder matches
         
         sections = split_into_sections(doc['content'])
         
@@ -253,14 +226,16 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
             # Score calculation: words found + bonus for header matches
             score = len(common_words)
             if any(word in section['header'].lower() for word in query_words):
-                score += 2  # Bonus points for header matches
+                score += 5  # Higher bonus points for header matches
+            
+            # Bonus for content length (more detailed content gets higher score)
+            content_length_bonus = min(len(content.split()) / 100, 3)  # Max 3 points for long content
+            score += content_length_bonus
             
             # Add filename/folder match score
             score += filename_match_score
             
-            # Apply feedback-based enhancements
-            if feedback_enhancement:
-                score = apply_feedback_enhancement(score, query, section, feedback_enhancement)
+            # Feedback enhancement removed - not used in current interface
             
             # Only include sections with matches (including filename matches)
             if score > 0:
@@ -277,63 +252,7 @@ def search_knowledge_base(query, knowledge_base, num_results=3):  # Increased de
     results.sort(key=lambda x: x['score'], reverse=True)
     return results[:num_results]
 
-def load_feedback_enhancement():
-    """Load feedback learning data for search enhancement"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        trainer = KnowledgeBaseTrainer()
-        learning_data = trainer.load_feedback_learning_data()
-        return learning_data.get('feedback_patterns', {})
-    except Exception as e:
-        print(f"⚠️  Error loading feedback enhancement: {e}")
-        return {}
-
-def apply_feedback_enhancement(score, query, section, feedback_patterns):
-    """Apply feedback-based enhancements to search scores"""
-    enhanced_score = score
-    
-    # Get query type for pattern matching
-    query_lower = query.lower()
-    query_type = categorize_query(query_lower)
-    
-    # Check if this query type has successful patterns
-    successful_patterns = feedback_patterns.get('successful_patterns', [])
-    for pattern in successful_patterns:
-        if pattern.get('query_type') == query_type:
-            # Boost score for queries that match successful patterns
-            enhanced_score += 1
-    
-    # Check for common issues to avoid
-    common_issues = feedback_patterns.get('common_issues', [])
-    if 'irrelevant_response' in common_issues:
-        # Be more strict with relevance scoring
-        if enhanced_score < 2:
-            enhanced_score *= 0.5
-    
-    # Check query improvements
-    query_improvements = feedback_patterns.get('query_improvements', {})
-    if query_lower in query_improvements:
-        # Apply specific improvements for this query
-        improvements = query_improvements[query_lower].get('suggested_improvements', [])
-        if 'add_more_details' in improvements:
-            # Boost sections with more detailed content
-            if len(section['content']) > 200:
-                enhanced_score += 1
-    
-    return enhanced_score
-
-def categorize_query(query):
-    """Categorize query type for pattern matching"""
-    if any(word in query for word in ['how', 'what', 'why', 'when', 'where']):
-        return 'question'
-    elif any(word in query for word in ['explain', 'describe', 'tell me about']):
-        return 'explanation'
-    elif any(word in query for word in ['find', 'search', 'look for']):
-        return 'search'
-    elif any(word in query for word in ['compare', 'difference', 'vs']):
-        return 'comparison'
-    else:
-        return 'general'
+# Feedback enhancement functions removed - not used in current interface
 
 # --- 3. Query Ollama with Context ---
 def ask_ollama_with_context(query, context_documents):
@@ -424,8 +343,11 @@ def ask_ollama_with_context(query, context_documents):
     return "Error: Unable to get response from any Ollama model. Please check if Ollama is running and has available models."
 
 # --- Flask Web Server Setup ---
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, send_file
 from flask_cors import CORS
+import tempfile
+import os
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 CORS(app)
@@ -440,21 +362,12 @@ def status():
         'status': 'running',
         'documents_loaded': reload_knowledge_base(),
         'knowledge_base_documents': len(kb),
-        'crewai_available': CREWAI_AVAILABLE,
+
         'ollama_available': OLLAMA_AVAILABLE,
         'feedback_available': FEEDBACK_AVAILABLE,
         'personality_loaded': bool(PERSONALITY_PROMPT),
-        'model_preloaded': MODEL_PRELOADED,
-        'hybrid_search_available': HYBRID_SEARCH_AVAILABLE
+        'model_preloaded': MODEL_PRELOADED
     }
-    
-    # Add LlamaIndex status if available
-    if HYBRID_SEARCH_SYSTEM:
-        llamaindex_stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
-        status_data.update({
-            'llamaindex_available': llamaindex_stats['llamaindex_available'],
-            'llamaindex_stats': llamaindex_stats
-        })
     
     return jsonify(status_data)
 
@@ -479,59 +392,15 @@ def ask():
         method = data.get('method', 'ai_analysis')
         
         if method == 'ai_analysis':
-            # Use CrewAI for AI analysis
-            if CREWAI_AVAILABLE:
-                try:
-                    print("🤖 Using CrewAI for local knowledge base analysis...")
-                    # Use the correct knowledge base path for Docker container
-                    crewai_analyzer = get_crewai_analyzer("/app/knowledge_base")
-                    crewai_result = crewai_analyzer.analyze_query(user_question)
-                    
-                    if crewai_result and crewai_result.get('answer'):
-                        steps.append("CrewAI multi-agent analysis completed")
-                        return jsonify({
-                            'answer': crewai_result['answer'],
-                            'sources': crewai_result.get('sources', []),
-                            'next_step': None,  # No further steps for AI analysis
-                            'steps': steps,
-                            'method': crewai_result.get('method', 'crewai')
-                        })
-                    else:
-                        print("⚠️  CrewAI returned no results, falling back to hybrid search")
-                except Exception as e:
-                    print(f"⚠️  CrewAI analysis failed: {e}, falling back to hybrid search")
+            # AI analysis method removed - use /query-with-model-stream instead
+            return jsonify({
+                'error': 'AI analysis method is deprecated. Please use the new CLI interface with /query-with-model-stream endpoint.',
+                'method': 'deprecated'
+            }), 400
             
-            # Use hybrid search if available, otherwise fallback to simple search
-            if HYBRID_SEARCH_SYSTEM and HYBRID_SEARCH_SYSTEM.llamaindex_available:
-                print("🔍 Using Hybrid Search System")
-                search_results = HYBRID_SEARCH_SYSTEM.search(
-                    query=user_question,
-                    knowledge_base=kb,
-                    search_mode='hybrid',
-                    num_results=5,
-                    similarity_threshold=0.6
-                )
-                
-                if search_results['results']:
-                    relevant_docs = []
-                    for result in search_results['results']:
-                        relevant_docs.append({
-                            'section': result['content'],
-                            'filename': result['filename'],
-                            'score': result['score'],
-                            'relevance': result.get('relevance', result['score']),
-                            'folder_path': result.get('folder_path', ''),
-                            'header': result.get('header', ''),
-                            'source_type': result.get('source_type', 'hybrid')
-                        })
-                    steps.append(f"Hybrid search found {len(relevant_docs)} relevant sections")
-                else:
-                    print("❌ No relevant content found with hybrid search, falling back to keyword search")
-                    relevant_docs = search_knowledge_base(user_question, kb)
-                    steps.append("Falling back to keyword search")
-            else:
-                print("🔍 Using Traditional Keyword Search")
-                relevant_docs = search_knowledge_base(user_question, kb)
+            # Use traditional keyword search
+            print("🔍 Using Traditional Keyword Search")
+            relevant_docs = search_knowledge_base(user_question, kb)
             
             if not relevant_docs:
                 steps.append("No relevant documents found in knowledge base.")
@@ -748,279 +617,17 @@ def get_document(filename):
     except Exception as e:
         return jsonify({'error': f'Error reading document: {str(e)}'}), 500
 
-@app.route('/feedback', methods=['POST'])
-def submit_feedback():
-    """Submit user feedback for an AI response"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No feedback data provided'}), 400
-        
-        required_fields = ['user_question', 'ai_response', 'rating', 'feedback_type']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Validate rating
-        rating = data['rating']
-        if not isinstance(rating, int) or rating < 1 or rating > 5:
-            return jsonify({'error': 'Rating must be an integer between 1 and 5'}), 400
-        
-        # Validate feedback type
-        feedback_type = data['feedback_type']
-        if feedback_type not in ['thumbs_up', 'thumbs_down', 'neutral']:
-            return jsonify({'error': 'Invalid feedback type'}), 400
-        
-        # Save feedback
-        success = save_user_feedback(
-            user_question=data['user_question'],
-            ai_response=data['ai_response'],
-            rating=rating,
-            feedback_type=feedback_type,
-            feedback_text=data.get('feedback_text', ''),
-            search_method=data.get('search_method', 'unknown'),
-            sources_used=data.get('sources_used', []),
-            relevance_score=data.get('relevance_score', 0.0),
-            user_session_id=data.get('user_session_id', '')
-        )
-        
-        if success:
-            # Generate learning insights based on the feedback
-            learning_insights = generate_feedback_insights(rating, feedback_type, data.get('feedback_text', ''))
-            
-            return jsonify({
-                'success': True,
-                'message': 'Feedback submitted successfully',
-                'rating': rating,
-                'feedback_type': feedback_type,
-                'learning_insights': learning_insights,
-                'will_improve': True,
-                'next_steps': [
-                    'Your feedback has been saved for learning',
-                    'The system will analyze patterns from your feedback',
-                    'Future responses will be improved based on your input',
-                    'You can retrain the system to apply changes immediately'
-                ]
-            })
-        else:
-            return jsonify({'error': 'Failed to save feedback'}), 500
-            
-    except Exception as e:
-        return jsonify({'error': f'Error submitting feedback: {str(e)}'}), 500
+# Feedback endpoints removed - not used in current interface
 
-def generate_feedback_insights(rating: int, feedback_type: str, feedback_text: str) -> list:
-    """Generate learning insights based on feedback"""
-    insights = []
-    
-    # Rating-based insights
-    if rating >= 4:
-        insights.append("✅ This response pattern will be reinforced for similar queries")
-        insights.append("🎯 Future searches will prioritize this type of content")
-    elif rating <= 2:
-        insights.append("🔍 The system will avoid similar response patterns")
-        insights.append("📈 Search relevance will be adjusted for better results")
-    
-    # Feedback text analysis
-    feedback_lower = feedback_text.lower()
-    
-    if 'more detail' in feedback_lower or 'incomplete' in feedback_lower:
-        insights.append("📝 Future responses will include more comprehensive information")
-    
-    if 'irrelevant' in feedback_lower or 'not helpful' in feedback_lower:
-        insights.append("🎯 Search relevance thresholds will be improved")
-    
-    if 'confusing' in feedback_lower or 'unclear' in feedback_lower:
-        insights.append("💡 Response clarity and structure will be enhanced")
-    
-    if 'too long' in feedback_lower or 'verbose' in feedback_lower:
-        insights.append("✂️ Future responses will be more concise")
-    
-    if 'examples' in feedback_lower or 'specific' in feedback_lower:
-        insights.append("📋 Responses will include more specific examples")
-    
-    if 'wrong' in feedback_lower or 'incorrect' in feedback_lower:
-        insights.append("🔍 Information accuracy will be improved")
-    
-    if 'structure' in feedback_lower or 'organize' in feedback_lower:
-        insights.append("📊 Response organization will be enhanced")
-    
-    return insights
 
-@app.route('/feedback/insights', methods=['GET'])
-def get_feedback_insights_endpoint():
-    """Get insights from feedback data"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        insights = get_feedback_insights()
-        return jsonify(insights)
-    except Exception as e:
-        return jsonify({'error': f'Error getting insights: {str(e)}'}), 500
 
-@app.route('/feedback/stats', methods=['GET'])
-def get_feedback_stats():
-    """Get feedback statistics"""
-    if not FEEDBACK_AVAILABLE:
-        return jsonify({'error': 'Feedback system not available'}), 500
-    
-    try:
-        from feedback_system import feedback_system
-        stats = feedback_system.get_feedback_stats()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': f'Error getting stats: {str(e)}'}), 500
 
-@app.route('/train', methods=['POST'])
-def train_knowledge_base():
-    """Trigger knowledge base training"""
-    try:
-        data = request.json
-        if not data or data.get('action') != 'train_knowledge_base':
-            return jsonify({'error': 'Invalid training action'}), 400
-        
-        # Import and run the training script
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        trainer.train()
-        
-        # Get updated document count
-        index = trainer.load_index()
-        documents_processed = index.get('total_files', 0) if index else 0
-        
-        return jsonify({
-            'success': True,
-            'message': 'Knowledge base training completed successfully',
-            'documents_processed': documents_processed,
-            'training_time': datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        print(f"Training error: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Training failed: {str(e)}'
-        }), 500
 
-@app.route('/training/status', methods=['GET'])
-def get_training_status():
-    """Get training status"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        status = trainer.get_training_status()
-        
-        return jsonify(status)
-        
-    except Exception as e:
-        print(f"Error getting training status: {e}")
-        return jsonify({
-            'error': f'Failed to get training status: {str(e)}'
-        }), 500
 
-@app.route('/training/stats', methods=['GET'])
-def get_training_stats():
-    """Get training statistics"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        index = trainer.load_index()
-        history = trainer.load_training_history()
-        
-        # Calculate stats
-        total_documents = index.get('total_files', 0) if index else 0
-        categories_trained = len(index.get('categories', {})) if index else 0
-        total_size = index.get('total_size', 0) if index else 0
-        
-        # Get last training time from index
-        last_training_time = index.get('last_updated', datetime.now().isoformat()) if index else datetime.now().isoformat()
-        
-        # Get actual training duration from history
-        training_duration = 0
-        if history:
-            latest_record = history[-1]
-            training_duration = latest_record.get('duration', 0)
-        
-        # Calculate improvement score based on document count and categories
-        improvement_score = min(100, (total_documents * 2) + (categories_trained * 10))
-        
-        stats = {
-            'total_documents': total_documents,
-            'last_training_time': last_training_time,
-            'training_duration': training_duration,
-            'documents_processed': total_documents,
-            'categories_trained': categories_trained,
-            'vector_store_size': total_size,
-            'improvement_score': improvement_score
-        }
-        
-        return jsonify(stats)
-        
-    except Exception as e:
-        print(f"Error getting training stats: {e}")
-        return jsonify({
-            'error': f'Failed to get training stats: {str(e)}'
-        }), 500
 
-@app.route('/training/history', methods=['GET'])
-def get_training_history():
-    """Get training history"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        history = trainer.load_training_history()
-        
-        return jsonify(history)
-        
-    except Exception as e:
-        print(f"Error getting training history: {e}")
-        return jsonify({
-            'error': f'Failed to get training history: {str(e)}'
-        }), 500
 
-@app.route('/training/feedback-insights', methods=['GET'])
-def get_feedback_insights():
-    """Get feedback learning insights"""
-    try:
-        from train_knowledge_base import KnowledgeBaseTrainer
-        
-        trainer = KnowledgeBaseTrainer()
-        learning_data = trainer.load_feedback_learning_data()
-        
-        if not learning_data:
-            return jsonify({
-                'message': 'No feedback learning data available. Train the system first to see insights.',
-                'has_data': False
-            })
-        
-        feedback_patterns = learning_data.get('feedback_patterns', {})
-        
-        insights = {
-            'has_data': True,
-            'learning_summary': learning_data.get('learning_summary', {}),
-            'successful_patterns': len(feedback_patterns.get('successful_patterns', [])),
-            'common_issues': list(set(feedback_patterns.get('common_issues', []))),
-            'query_improvements': len(feedback_patterns.get('query_improvements', {})),
-            'high_rated_count': len(feedback_patterns.get('high_rated_queries', [])),
-            'low_rated_count': len(feedback_patterns.get('low_rated_queries', [])),
-            'response_guidelines': feedback_patterns.get('response_guidelines', {}),
-            'last_updated': learning_data.get('last_updated', 'Unknown')
-        }
-        
-        return jsonify(insights)
-        
-    except Exception as e:
-        print(f"Error getting feedback insights: {e}")
-        return jsonify({
-            'error': f'Failed to get feedback insights: {str(e)}'
-        }), 500
+
+
 
 @app.route('/ask-ollama', methods=['POST'])
 def ask_ollama():
@@ -1122,9 +729,71 @@ def ask_ollama():
             'error': f'Error processing Ollama query: {str(e)}'
         }), 500
 
+@app.route('/ask-ollama-stream', methods=['POST'])
+def ask_ollama_stream():
+    """Stream question using Ollama with knowledge base context"""
+    if not OLLAMA_AVAILABLE:
+        return jsonify({
+            'error': 'Ollama trainer not available'
+        }), 500
+
+    if not kb:
+        return jsonify({
+            'error': 'Knowledge base is empty or not found. Please add .md files to the /app/knowledge_base folder.'
+        }), 500
+
+    data = request.json
+    if not data or 'question' not in data:
+        return jsonify({'error': 'No question provided'}), 400
+
+    user_question = data['question']
+    
+    def generate():
+        try:
+            # Search knowledge base for relevant context
+            relevant_docs = search_knowledge_base(user_question, kb, num_results=3)
+            
+            if not relevant_docs:
+                yield f"data: {{\"error\": \"I couldn't find any relevant information in the knowledge base for your question.\"}}\n\n"
+                return
+            
+            # Prepare context from relevant documents
+            context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
+            
+            # Send sources info first
+            sources = [{
+                'filename': doc['filename'],
+                'folder_path': doc['folder_path'],
+                'relevance': doc['relevance'],
+                'header': doc['header'] if doc['header'] else 'No header',
+                'content': doc['section'],
+                'full_document_available': True
+            } for doc in relevant_docs]
+            
+            yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
+            
+            # Query Ollama with streaming
+            global OLLAMA_TRAINER
+            
+            if OLLAMA_TRAINER:
+                for chunk in OLLAMA_TRAINER.query_ollama_stream(user_question, context):
+                    yield chunk
+            else:
+                # Fallback to creating a new instance
+                ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                ollama_trainer = OllamaTrainer(ollama_url)
+                for chunk in ollama_trainer.query_ollama_stream(user_question, context):
+                    yield chunk
+                    
+        except Exception as e:
+            print(f"Error in streaming Ollama query: {e}")
+            yield f"data: {{\"error\": \"Error processing streaming Ollama query: {str(e)}\"}}\n\n"
+    
+    return Response(generate(), mimetype='text/plain')
+
 @app.route('/train-ollama', methods=['POST'])
 def train_ollama():
-    """Train Ollama model on knowledge base and feedback"""
+    """Train Ollama model on selected knowledge base files with custom naming"""
     if not OLLAMA_AVAILABLE:
         return jsonify({
             'error': 'Ollama trainer not available'
@@ -1135,20 +804,63 @@ def train_ollama():
         if not data or data.get('action') != 'train_ollama':
             return jsonify({'error': 'Invalid training action'}), 400
         
+        # Get required parameters
+        selected_model = data.get('selected_model')
+        if not selected_model:
+            return jsonify({
+                'success': False,
+                'error': 'No model selected. Please select a model from the dropdown before training.'
+            }), 400
+        
+        # Get selected files/folders for training
+        selected_files = data.get('selected_files', [])
+        if not selected_files:
+            return jsonify({
+                'success': False,
+                'error': 'No files selected for training. Please select at least one file or folder.'
+            }), 400
+        
+        # Get custom model name suffix
+        custom_name = data.get('custom_name', '').strip()
+        if not custom_name:
+            return jsonify({
+                'success': False,
+                'error': 'Custom model name is required.'
+            }), 400
+        
+        # Get selected behavior file
+        behavior_filename = data.get('behavior_filename', 'behavior.md')
+        
+        # Validate custom name (alphanumeric, hyphens, underscores only)
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', custom_name):
+            return jsonify({
+                'success': False,
+                'error': 'Custom name can only contain letters, numbers, hyphens, and underscores.'
+            }), 400
+        
         # Initialize Ollama trainer
         ollama_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         ollama_trainer = OllamaTrainer(ollama_url)
         
-        # Train the model
-        result = ollama_trainer.train()
+        # Train the model with selected files, custom name, and behavior
+        result = ollama_trainer.train_with_custom_selection(
+            base_model=selected_model,
+            selected_files=selected_files,
+            custom_name=custom_name,
+            behavior_filename=behavior_filename
+        )
         
         if result['success']:
             return jsonify({
                 'success': True,
-                'message': 'Ollama model training completed successfully',
+                'message': f'Ollama model training completed successfully',
+                'base_model': selected_model,
+                'trained_model': result.get('trained_model_name'),
+                'custom_name': custom_name,
+                'selected_files': selected_files,
                 'training_examples': result.get('training_examples', 0),
                 'kb_examples': result.get('kb_examples', 0),
-                'feedback_examples': result.get('feedback_examples', 0),
                 'duration': result.get('duration', 0),
                 'training_time': datetime.now().isoformat()
             })
@@ -1163,6 +875,87 @@ def train_ollama():
         return jsonify({
             'success': False,
             'error': f'Ollama training failed: {str(e)}'
+        }), 500
+
+@app.route('/knowledge-base/structure', methods=['GET'])
+def get_knowledge_base_structure():
+    """Get the structure of the knowledge base for training selection"""
+    try:
+        knowledge_base_path = "/app/knowledge_base"
+        structure = []
+        
+        if not os.path.exists(knowledge_base_path):
+            return jsonify({
+                'success': True,
+                'structure': [],
+                'message': 'Knowledge base directory not found'
+            })
+        
+        def scan_directory(path, base_path):
+            items = []
+            try:
+                for item in sorted(os.listdir(path)):
+                    if item.startswith('.'):
+                        continue
+                    
+                    item_path = os.path.join(path, item)
+                    relative_path = os.path.relpath(item_path, base_path)
+                    
+                    if os.path.isdir(item_path):
+                        # Directory
+                        children = scan_directory(item_path, base_path)
+                        items.append({
+                            'name': item,
+                            'type': 'directory',
+                            'path': relative_path,
+                            'children': children,
+                            'file_count': sum(1 for child in children if child['type'] == 'file')
+                        })
+                    elif item.endswith('.md'):
+                        # Markdown file
+                        try:
+                            stat = os.stat(item_path)
+                            size = stat.st_size
+                            modified = datetime.fromtimestamp(stat.st_mtime).isoformat()
+                            
+                            items.append({
+                                'name': item,
+                                'type': 'file',
+                                'path': relative_path,
+                                'size': size,
+                                'modified': modified
+                            })
+                        except OSError:
+                            continue
+            except PermissionError:
+                pass
+            
+            return items
+        
+        structure = scan_directory(knowledge_base_path, knowledge_base_path)
+        
+        total_files = 0
+        def count_files(items):
+            nonlocal total_files
+            for item in items:
+                if item['type'] == 'file':
+                    total_files += 1
+                elif item['type'] == 'directory':
+                    count_files(item['children'])
+        
+        count_files(structure)
+        
+        return jsonify({
+            'success': True,
+            'structure': structure,
+            'total_files': total_files
+        })
+        
+    except Exception as e:
+        print(f"❌ Error getting knowledge base structure: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 @app.route('/performance', methods=['GET'])
@@ -1185,8 +978,8 @@ def get_personality():
     """Get current personality prompt"""
     return jsonify({
         'personality_prompt': get_personality_prompt(),
-        'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md'),
-        'behavior_file_path': '/app/knowledge_base/behavior.md'
+        'has_behavior_file': os.path.exists('/app/behavior_model/behavior.md'),
+        'behavior_file_path': '/app/behavior_model/behavior.md'
     })
 
 @app.route('/personality/reload', methods=['POST'])
@@ -1198,12 +991,98 @@ def reload_personality():
             'success': True,
             'message': 'Personality prompt reloaded successfully',
             'personality_prompt': get_personality_prompt(),
-            'has_behavior_file': os.path.exists('/app/knowledge_base/behavior.md')
+            'has_behavior_file': os.path.exists('/app/behavior_model/behavior.md')
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'error': f'Failed to reload personality: {str(e)}'
+        }), 500
+
+@app.route('/behaviors', methods=['GET'])
+def get_behaviors():
+    """Get list of available behavior files"""
+    try:
+        behavior_dir = "/app/behavior_model"
+        behaviors = []
+        
+        if os.path.exists(behavior_dir):
+            for filename in os.listdir(behavior_dir):
+                if filename.endswith('.md'):
+                    filepath = os.path.join(behavior_dir, filename)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            
+                        # Extract name from first header or use filename
+                        lines = content.split('\n')
+                        name = filename.replace('.md', '').replace('_', ' ').replace('-', ' ').title()
+                        description = "Custom behavior profile"
+                        preview = ""
+                        
+                        for line in lines:
+                            if line.startswith('# '):
+                                name = line[2:].strip()
+                                if ' - ' in name:
+                                    parts = name.split(' - ', 1)
+                                    name = parts[1]
+                                    description = f"{parts[0]} behavior"
+                                break
+                        
+                        # Get a preview from the content
+                        for line in lines:
+                            if line.strip() and not line.startswith('#') and not line.startswith('##'):
+                                preview = line.strip()[:100] + "..." if len(line.strip()) > 100 else line.strip()
+                                break
+                        
+                        behaviors.append({
+                            'name': name,
+                            'filename': filename,
+                            'description': description,
+                            'preview': preview
+                        })
+                        
+                    except Exception as e:
+                        print(f"Error reading behavior file {filename}: {e}")
+                        
+        return jsonify({
+            'success': True,
+            'behaviors': behaviors
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get behaviors: {str(e)}'
+        }), 500
+
+@app.route('/behaviors/select', methods=['POST'])
+def select_behavior():
+    """Select a behavior file to use"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Request data is required'
+            }), 400
+            
+        behavior_filename = data.get('behavior_filename', 'behavior.md')
+        
+        # Load the selected behavior
+        load_personality_prompt(behavior_filename)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Behavior {behavior_filename} selected successfully',
+            'selected_behavior': behavior_filename,
+            'personality_prompt': get_personality_prompt()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Failed to select behavior: {str(e)}'
         }), 500
 
 @app.route('/knowledge-base/reload', methods=['POST'])
@@ -1222,23 +1101,41 @@ def reload_knowledge_base_endpoint():
             'error': f'Failed to reload knowledge base: {str(e)}'
         }), 500
 
-# --- LlamaIndex and Hybrid Search Endpoints ---
+# LlamaIndex and Hybrid Search endpoints removed - not used in current interface
 
-@app.route('/llamaindex/status', methods=['GET'])
-def llamaindex_status():
-    """Get LlamaIndex system status"""
+# --- Model Management Endpoints ---
+
+@app.route('/models', methods=['GET'])
+def get_models():
+    """Get list of available models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
     try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
+        models = model_manager.get_available_models()
+        model_data = []
+        
+        for model in models:
+            model_data.append({
+                'name': model.name,
+                'size': model.size,
+                'size_mb': round(model.size / (1024**2), 1),
+                'size_gb': round(model.size / (1024**3), 2),
+                'modified_at': model.modified_at,
+                'is_running': model.is_running,
+                'is_trained': model.is_trained,
+                'base_model': model.base_model,
+                'description': model.description
             })
         
-        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
         return jsonify({
             'success': True,
-            'llamaindex_available': stats['llamaindex_available'],
-            'stats': stats
+            'models': model_data,
+            'total_models': len(model_data),
+            'selected_model': model_manager.get_selected_model()
         })
     except Exception as e:
         return jsonify({
@@ -1246,24 +1143,21 @@ def llamaindex_status():
             'error': str(e)
         }), 500
 
-@app.route('/llamaindex/rebuild', methods=['POST'])
-def rebuild_llamaindex():
-    """Rebuild LlamaIndex"""
+@app.route('/models/running', methods=['GET'])
+def get_running_models():
+    """Get list of currently running models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
     try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        data = request.get_json() or {}
-        force_rebuild = data.get('force_rebuild', True)
-        
-        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
-        
+        running_models = model_manager.get_running_models()
         return jsonify({
             'success': True,
-            'result': result
+            'running_models': running_models,
+            'count': len(running_models)
         })
     except Exception as e:
         return jsonify({
@@ -1271,330 +1165,301 @@ def rebuild_llamaindex():
             'error': str(e)
         }), 500
 
-@app.route('/search/hybrid', methods=['POST'])
-def hybrid_search():
-    """Perform hybrid search using LlamaIndex and keyword search"""
+@app.route('/models/select', methods=['POST'])
+def select_model():
+    """Select a model for queries"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
     try:
         data = request.get_json()
-        if not data or 'query' not in data:
+        if not data or 'model_name' not in data:
             return jsonify({
                 'success': False,
-                'error': 'Query is required'
+                'error': 'Model name is required'
             }), 400
         
-        query = data['query']
-        search_mode = data.get('search_mode', 'hybrid')  # hybrid, llamaindex, keyword, fallback
-        num_results = data.get('num_results', 5)
-        similarity_threshold = data.get('similarity_threshold', 0.6)
+        model_name = data['model_name']
+        success = model_manager.set_selected_model(model_name)
         
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        # Perform hybrid search
-        search_results = HYBRID_SEARCH_SYSTEM.search(
-            query=query,
-            knowledge_base=kb,
-            search_mode=search_mode,
-            num_results=num_results,
-            similarity_threshold=similarity_threshold
-        )
-        
-        return jsonify({
-            'success': True,
-            'search_results': search_results
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/search/llamaindex', methods=['POST'])
-def llamaindex_query():
-    """Query using LlamaIndex RAG pipeline"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        use_cache = data.get('use_cache', True)
-        similarity_threshold = data.get('similarity_threshold', 0.7)
-        top_k = data.get('top_k', 5)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        # Query using LlamaIndex
-        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
-            query=query,
-            use_cache=use_cache,
-            similarity_threshold=similarity_threshold,
-            top_k=top_k
-        )
-        
-        return jsonify({
-            'success': True,
-            'result': result
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/search/stats', methods=['GET'])
-def get_search_stats():
-    """Get search system statistics"""
-    try:
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'Hybrid search system not available'
-            })
-        
-        stats = HYBRID_SEARCH_SYSTEM.get_system_stats()
-        return jsonify({
-            'success': True,
-            'stats': stats
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/query', methods=['POST'])
-def pure_llamaindex_query():
-    """Pure LlamaIndex query - fast RAG with your knowledge base"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        use_cache = data.get('use_cache', True)
-        similarity_threshold = data.get('similarity_threshold', 0.5)  # Lower threshold for more results
-        top_k = data.get('top_k', 8)  # More results for better coverage
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
-        
-        # Query using pure LlamaIndex
-        result = HYBRID_SEARCH_SYSTEM.query_with_llamaindex(
-            query=query,
-            use_cache=use_cache,
-            similarity_threshold=similarity_threshold,
-            top_k=top_k
-        )
-        
-        if not result['success']:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Query failed')
-            }), 500
-        
-        # Format the response for better readability
-        response = {
-            'success': True,
-            'query': query,
-            'answer': result['response'],
-            'sources': [],
-            'query_time': result['query_time'],
-            'total_sources_found': result['total_sources'],
-            'sources_used': result['filtered_sources']
-        }
-        
-        # Format sources with file information
-        for source in result['sources']:
-            formatted_source = {
-                'content': source['content'][:300] + '...' if len(source['content']) > 300 else source['content'],
-                'filename': source['filename'],
-                'relevance_score': round(source['score'], 3),
-                'file_path': source['filename']
-            }
-            response['sources'].append(formatted_source)
-        
-        return jsonify(response)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/fast-query', methods=['POST'])
-def fast_llamaindex_query():
-    """Fast LlamaIndex query - returns retrieved documents without LLM response generation"""
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'Query is required'
-            }), 400
-        
-        query = data['query']
-        top_k = data.get('top_k', 8)
-        similarity_threshold = data.get('similarity_threshold', 0.0)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
-        
-        start_time = time.time()
-        
-        # Get similar documents directly
-        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
-            query=query,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold
-        )
-        
-        query_time = time.time() - start_time
-        
-        # Format the response
-        response = {
-            'success': True,
-            'query': query,
-            'query_time': query_time,
-            'documents_found': len(similar_docs),
-            'answer': f"Found {len(similar_docs)} relevant documents from your knowledge base.",
-            'sources': []
-        }
-        
-        # Format sources with file information
-        for doc in similar_docs:
-            formatted_source = {
-                'content': doc['content'][:500] + '...' if len(doc['content']) > 500 else doc['content'],
-                'filename': doc['filename'],
-                'relevance_score': round(doc['score'], 6),
-                'file_path': doc['filename'],
-                'full_content': doc['content']  # Include full content for reference
-            }
-            response['sources'].append(formatted_source)
-        
-        return jsonify(response)
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/llamaindex/train', methods=['POST'])
-def train_llamaindex():
-    """Train/rebuild LlamaIndex on your knowledge base"""
-    try:
-        data = request.get_json() or {}
-        force_rebuild = data.get('force_rebuild', True)
-        
-        if not HYBRID_SEARCH_SYSTEM:
-            return jsonify({
-                'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
-        
-        # Rebuild the index
-        result = HYBRID_SEARCH_SYSTEM.rebuild_index(force_rebuild=force_rebuild)
-        
-        if result['success']:
+        if success:
             return jsonify({
                 'success': True,
-                'message': 'LlamaIndex trained successfully!',
-                'stats': {
-                    'documents_processed': result['documents_processed'],
-                    'chunks_created': result['chunks_created'],
-                    'training_time': round(result['indexing_time'], 2),
-                    'index_size_mb': result.get('index_size_mb', 0)
-                }
+                'selected_model': model_name,
+                'message': f'Model {model_name} selected successfully'
             })
         else:
             return jsonify({
                 'success': False,
-                'error': result.get('error', 'Training failed')
-            }), 500
-        
+                'error': f'Model {model_name} not available'
+            }), 400
+            
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
 
-@app.route('/llamaindex/debug', methods=['POST'])
-def debug_llamaindex():
-    """Debug endpoint to test document retrieval without LLM response"""
+@app.route('/models/<model_name>/start', methods=['POST'])
+def start_model(model_name):
+    """Start/load a model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        success = model_manager.start_model(model_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} started successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to start model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_name>/stop', methods=['POST'])
+def stop_model(model_name):
+    """Stop/unload a model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        success = model_manager.stop_model(model_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} stopped successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to stop model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/stats', methods=['GET'])
+def get_model_stats():
+    """Get model statistics"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        stats = model_manager.get_model_stats()
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/pull', methods=['POST'])
+def pull_model():
+    """Pull/download a new model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
     try:
         data = request.get_json()
-        if not data or 'query' not in data:
+        if not data or 'model_name' not in data:
             return jsonify({
                 'success': False,
-                'error': 'Query is required'
+                'error': 'Model name is required'
             }), 400
         
-        query = data['query']
-        top_k = data.get('top_k', 10)
-        similarity_threshold = data.get('similarity_threshold', 0.0)
+        model_name = data['model_name']
+        success = model_manager.pull_model(model_name)
         
-        if not HYBRID_SEARCH_SYSTEM:
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Model {model_name} pulled successfully'
+            })
+        else:
             return jsonify({
                 'success': False,
-                'error': 'LlamaIndex system not available'
-            }), 503
+                'error': f'Failed to pull model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/<model_name>/delete', methods=['DELETE'])
+def delete_model(model_name):
+    """Delete a model"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        # Check if it's a trained model before deletion for better response
+        is_trained = model_manager._is_trained_model(model_name)
         
-        # Check and update LlamaIndex availability
-        if not HYBRID_SEARCH_SYSTEM.check_llamaindex_availability():
+        success = model_manager.delete_model(model_name)
+        
+        if success:
+            message = f'Model {model_name} deleted successfully'
+            if is_trained:
+                message += ' (including associated training files)'
+            
+            return jsonify({
+                'success': True,
+                'message': message,
+                'was_trained_model': is_trained
+            })
+        else:
             return jsonify({
                 'success': False,
-                'error': 'LlamaIndex not available. Please train the knowledge base first.'
-            }), 503
+                'error': f'Failed to delete model {model_name}'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/models/cleanup-orphaned-files', methods=['POST'])
+def cleanup_orphaned_files():
+    """Clean up orphaned training files that don't correspond to existing models"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': 'Model manager not available'
+        }), 500
+    
+    try:
+        import os
+        from pathlib import Path
         
-        # Get similar documents directly
-        similar_docs = HYBRID_SEARCH_SYSTEM.llamaindex_manager.get_similar_documents(
-            query=query,
-            top_k=top_k,
-            similarity_threshold=similarity_threshold
-        )
+        local_models_dir = "/app/local_models"
+        if not os.path.exists(local_models_dir):
+            return jsonify({
+                'success': True,
+                'message': 'No local_models directory found',
+                'deleted_files': []
+            })
+        
+        # Get all existing models
+        existing_models = [model.name for model in model_manager.get_available_models()]
+        print(f"🔍 Existing models: {existing_models}")
+        
+        # Get all files in local_models directory
+        all_files = []
+        for filename in os.listdir(local_models_dir):
+            file_path = os.path.join(local_models_dir, filename)
+            if os.path.isfile(file_path):
+                all_files.append(filename)
+        
+        print(f"🔍 All files in local_models: {all_files}")
+        
+        # Find orphaned files (files that don't correspond to existing models)
+        orphaned_files = []
+        for filename in all_files:
+            is_orphaned = True
+            
+            # Check if this file corresponds to any existing model
+            for model_name in existing_models:
+                # Extract base model and custom name
+                base_model = model_manager._get_base_model(model_name)
+                safe_base_model = base_model.replace(':', '_').replace('/', '_')
+                
+                # Check various patterns
+                patterns_to_check = [
+                    f"Modelfile_{safe_base_model}",
+                    f"ollama_training_{safe_base_model}",
+                    f"ollama_training_data_{safe_base_model}",
+                ]
+                
+                # Add custom name patterns if model has custom name
+                if '-' in model_name and not model_name.endswith('-trained'):
+                    parts = model_name.split('-')
+                    if len(parts) >= 2:
+                        custom_name = '-'.join(parts[1:])
+                        patterns_to_check.extend([
+                            f"Modelfile_{safe_base_model}_{custom_name}",
+                            f"ollama_training_{safe_base_model}_{custom_name}",
+                            f"ollama_training_data_{safe_base_model}_{custom_name}",
+                        ])
+                        
+                        # Also check truncated versions
+                        for i in range(3, len(custom_name)):
+                            short_name = custom_name[:i]
+                            patterns_to_check.extend([
+                                f"Modelfile_{safe_base_model}_{short_name}",
+                                f"ollama_training_{safe_base_model}_{short_name}",
+                                f"ollama_training_data_{safe_base_model}_{short_name}",
+                            ])
+                
+                # Check if filename matches any pattern
+                for pattern in patterns_to_check:
+                    if filename.startswith(pattern):
+                        is_orphaned = False
+                        print(f"✅ File {filename} matches pattern {pattern} for model {model_name}")
+                        break
+                
+                if not is_orphaned:
+                    break
+            
+            if is_orphaned:
+                orphaned_files.append(filename)
+                print(f"❌ File {filename} is orphaned (no matching model found)")
+        
+        print(f"🔍 Orphaned files found: {orphaned_files}")
+        
+        # Delete orphaned files
+        deleted_files = []
+        for filename in orphaned_files:
+            file_path = os.path.join(local_models_dir, filename)
+            try:
+                os.remove(file_path)
+                deleted_files.append(filename)
+                print(f"🗑️ Deleted orphaned file: {filename}")
+            except OSError as e:
+                print(f"⚠️ Could not delete {filename}: {e}")
         
         return jsonify({
             'success': True,
-            'query': query,
-            'documents_found': len(similar_docs),
-            'documents': similar_docs
+            'message': f'Cleaned up {len(deleted_files)} orphaned files',
+            'deleted_files': deleted_files,
+            'total_orphaned_found': len(orphaned_files)
         })
         
     except Exception as e:
@@ -1602,6 +1467,203 @@ def debug_llamaindex():
             'success': False,
             'error': str(e)
         }), 500
+
+
+
+@app.route('/query-with-model-stream', methods=['POST'])
+def query_with_model_stream():
+    """Stream query with selected model and optional file inclusion"""
+    if not MODEL_MANAGER_AVAILABLE:
+        return jsonify({
+            'error': 'Model manager not available'
+        }), 500
+    
+    data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({'error': 'Question is required'}), 400
+    
+    question = data['question']
+    include_files = data.get('include_files', True)
+    model_name = data.get('model_name')  # Optional override
+    
+    def generate():
+        try:
+            # Set model if specified
+            if model_name:
+                model_manager.set_selected_model(model_name)
+            
+            # Get context if including files
+            context = ""
+            sources = []
+            if include_files and kb:
+                relevant_docs = search_knowledge_base(question, kb, num_results=8)  # Increased for better coverage
+                if relevant_docs:
+                    context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
+                    sources = [{
+                        'filename': doc['filename'],
+                        'folder_path': doc['folder_path'],
+                        'relevance': doc['relevance'],
+                        'header': doc['header'] if doc['header'] else 'No header',
+                        'content': doc['section'],
+                        'full_document_available': True
+                    } for doc in relevant_docs]
+            
+            # Send metadata first
+            yield f"data: {{\"sources\": {json.dumps(sources)}, \"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
+            
+            # Stream the response
+            response_obj = model_manager.query_with_selected_model(
+                prompt=question,
+                stream=True,
+                include_files=include_files,
+                context=context,
+                personality_prompt=get_personality_prompt()
+            )
+            
+            if response_obj:
+                # Process Ollama's streaming response
+                response_count = 0
+                for line in response_obj.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        try:
+                            data = json.loads(line_str)
+                            
+                            # Handle Ollama's streaming format
+                            if 'response' in data:
+                                # Escape any quotes in the response text
+                                response_text = data['response'].replace('"', '\\"').replace('\n', '\\n')
+                                yield f"data: {{\"response\": \"{response_text}\"}}\n\n"
+                                response_count += 1
+                            
+                            # Check if done - break out of the loop when done
+                            if data.get('done', False):
+                                print(f"✅ Streaming completed with {response_count} response chunks")
+                                # Send done signal and break
+                                yield f"data: {{\"done\": true}}\n\n"
+                                break
+                                
+                        except json.JSONDecodeError:
+                            # Skip invalid JSON lines
+                            continue
+                            
+                # Ensure we send a final done signal if we didn't already
+                if response_count == 0:
+                    print("⚠️ No response chunks received from Ollama")
+                yield f"data: {{\"done\": true}}\n\n"
+            else:
+                yield f"data: {{\"error\": \"Failed to get response from model\"}}\n\n"
+                
+        except Exception as e:
+            print(f"❌ Streaming error: {e}")
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+    
+    # Return proper Server-Sent Events response
+    return Response(
+        generate(), 
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Cache-Control'
+        }
+    )
+
+
+@app.route('/convert-docx-to-markdown', methods=['POST'])
+def convert_docx_to_markdown():
+    """Convert uploaded DOCX files to Markdown format"""
+    try:
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+        
+        files = request.files.getlist('files')
+        
+        # Check if files were selected
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': 'No files selected'}), 400
+        
+        # Check if all files are DOCX files
+        invalid_files = [file.filename for file in files if not file.filename.lower().endswith('.docx')]
+        if invalid_files:
+            return jsonify({'error': f'All files must be DOCX files. Invalid files: {", ".join(invalid_files)}'}), 400
+        
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            converted_files = []
+            
+            # Process each file
+            for file in files:
+                if file.filename == '':
+                    continue
+                    
+                # Secure the filename
+                filename = secure_filename(file.filename)
+                
+                # Save the uploaded file temporarily
+                docx_path = os.path.join(temp_dir, filename)
+                file.save(docx_path)
+                
+                # Convert DOCX to Markdown using markitdown
+                try:
+                    from markitdown import MarkItDown
+                    
+                    # Create MarkItDown instance and convert the file
+                    converter = MarkItDown()
+                    result = converter.convert_local(docx_path)
+                    markdown_content = result.text_content
+                    
+                    # Create the output filename (replace .docx with .md)
+                    base_name = os.path.splitext(filename)[0]
+                    markdown_filename = f"{base_name}.md"
+                    markdown_path = os.path.join(temp_dir, markdown_filename)
+                    
+                    # Write the markdown content to file
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(markdown_content)
+                    
+                    converted_files.append((markdown_path, markdown_filename))
+                    
+                except ImportError:
+                    return jsonify({'error': 'markitdown library not available'}), 500
+                except Exception as e:
+                    return jsonify({'error': f'Conversion failed for {filename}: {str(e)}'}), 500
+            
+            # Return single file or create zip for multiple files
+            if len(converted_files) == 1:
+                # Single file - return directly
+                markdown_path, markdown_filename = converted_files[0]
+                return send_file(
+                    markdown_path,
+                    as_attachment=True,
+                    download_name=markdown_filename,
+                    mimetype='text/markdown'
+                )
+            else:
+                # Multiple files - create zip
+                import zipfile
+                zip_path = os.path.join(temp_dir, 'converted_files.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for markdown_path, markdown_filename in converted_files:
+                        zipf.write(markdown_path, markdown_filename)
+                
+                # Create zip filename based on first file
+                first_filename = os.path.splitext(secure_filename(files[0].filename))[0]
+                zip_filename = f"{first_filename}_and_{len(converted_files) - 1}_more_files.zip"
+                
+                return send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name=zip_filename,
+                    mimetype='application/zip'
+                )
+                
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 
 if __name__ == "__main__":
     # Initialize knowledge base at startup
