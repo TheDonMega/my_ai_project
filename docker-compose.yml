@@ -30,6 +30,8 @@ services:
           memory: 3G
           cpus: '1.5'
 
+
+
   frontend:
     build:
       context: ./frontend
