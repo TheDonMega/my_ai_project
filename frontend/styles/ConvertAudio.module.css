@@ -290,6 +290,13 @@
   font-weight: 500;
 }
 
+.metadataInfo {
+  margin-top: 0.5rem !important;
+  font-size: 0.9rem !important;
+  color: #667eea !important;
+  font-style: italic;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .container {

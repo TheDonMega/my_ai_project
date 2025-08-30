@@ -69,6 +69,7 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - Drag & drop or click to select multiple files
   - Supports MP3, WAV, M4A, FLAC, OGG, AAC, WMA formats
   - CPU-optimized Whisper model for local processing
+  - **Automatic metadata extraction** (title, artist, album, duration, bitrate, etc.)
   - Preserves original filenames with .md extension
   - Single file downloads as .md, multiple files as zip
   - Automatic file download after transcription
@@ -997,6 +998,7 @@ This workflow allows you to build a comprehensive knowledge base from various so
 - **📝 Preserved Filenames**: Keeps original filenames with .md extension
 - **📦 Smart Download**: Single file downloads as .md, multiple files as zip
 - **⚡ CPU-Optimized**: Uses Whisper base model for efficient CPU processing
+- **📋 Metadata Extraction**: Automatically extracts audio metadata (title, artist, album, duration, etc.)
 - **💾 Automatic Download**: Transcribed files are automatically downloaded
 - **🎨 Modern Interface**: Clean, responsive design that matches the app theme
 
@@ -1034,6 +1036,7 @@ This workflow allows you to build a comprehensive knowledge base from various so
 3. **Transcribe and Download**:
    - Click "Transcribe to Markdown" button
    - Files are processed using OpenAI Whisper (CPU-optimized)
+   - Audio metadata is automatically extracted and included
    - Single file: downloads as .md file
    - Multiple files: downloads as zip file with all transcribed files
    - Original filenames are preserved with .md extension
@@ -1053,10 +1056,12 @@ This workflow allows you to build a comprehensive knowledge base from various so
 - **Single File**: 
   - Input: `Meeting Recording.mp3`
   - Output: `Meeting Recording.md` (automatically downloaded)
+  - Includes: Transcript + audio metadata (title, artist, duration, etc.)
 
 - **Multiple Files**:
   - Input: `Interview.wav`, `Presentation.m4a`, `Notes.flac`
   - Output: `Interview_and_2_more_files.zip` (contains all transcribed .md files)
+  - Each file includes: Transcript + audio metadata
 
 ### Technical Details
 
@@ -1068,9 +1073,10 @@ This workflow allows you to build a comprehensive knowledge base from various so
 ### Audio to Markdown Technical Details
 
 - **Library**: Uses OpenAI's [Whisper](https://github.com/openai/whisper) model
-- **Dependencies**: Includes PyTorch, torchaudio, and FFmpeg for audio processing
+- **Dependencies**: Includes PyTorch, torchaudio, FFmpeg, and mutagen for audio processing
 - **Model**: Uses Whisper "base" model optimized for CPU processing
 - **Format Support**: Supports MP3, WAV, M4A, FLAC, OGG, AAC, WMA formats
+- **Metadata Extraction**: Uses mutagen library to extract audio metadata
 - **Output Format**: Generates structured Markdown with headers, metadata, and timestamps
 - **Error Handling**: Comprehensive error messages for invalid files or transcription failures
 

@@ -1974,6 +1974,102 @@ def get_file_info():
         return jsonify({'error': f'Error getting file info: {str(e)}'}), 500
 
 
+def extract_audio_metadata(audio_path: str) -> dict:
+    """Extract metadata from audio file using mutagen library"""
+    metadata = {}
+    
+    try:
+        import mutagen
+        from mutagen import File
+        from mutagen.mp3 import MP3
+        from mutagen.wave import WAVE
+        from mutagen.flac import FLAC
+        from mutagen.mp4 import MP4
+        from mutagen.oggvorbis import OggVorbis
+        from mutagen.asf import ASF
+        
+        # Get file extension
+        file_ext = os.path.splitext(audio_path)[1].lower()
+        
+        # Load audio file based on format
+        if file_ext == '.mp3':
+            audio = MP3(audio_path)
+        elif file_ext == '.wav':
+            audio = WAVE(audio_path)
+        elif file_ext == '.flac':
+            audio = FLAC(audio_path)
+        elif file_ext in ['.m4a', '.mp4']:
+            audio = MP4(audio_path)
+        elif file_ext == '.ogg':
+            audio = OggVorbis(audio_path)
+        elif file_ext == '.wma':
+            audio = ASF(audio_path)
+        else:
+            # Try generic mutagen file
+            audio = File(audio_path)
+        
+        if audio is not None:
+            # Extract common metadata fields
+            metadata_fields = {
+                'title': ['title', 'TIT2', '\xa9nam'],
+                'artist': ['artist', 'TPE1', '\xa9ART'],
+                'album': ['album', 'TALB', '\xa9alb'],
+                'date': ['date', 'TDRC', '\xa9day'],
+                'genre': ['genre', 'TCON', '\xa9gen'],
+                'comment': ['comment', 'COMM', '\xa9cmt'],
+                'composer': ['composer', 'TCOM', '\xa9wrt'],
+                'track': ['track', 'TRCK', 'trkn'],
+                'disc': ['disc', 'TPOS', 'disk']
+            }
+            
+            for field_name, field_keys in metadata_fields.items():
+                for key in field_keys:
+                    if key in audio:
+                        value = audio[key]
+                        if isinstance(value, list):
+                            value = value[0]
+                        if hasattr(value, 'text'):
+                            value = value.text[0] if value.text else None
+                        if value:
+                            metadata[field_name.title()] = str(value)
+                            break
+            
+            # Extract technical metadata
+            if hasattr(audio, 'info'):
+                info = audio.info
+                if hasattr(info, 'length'):
+                    duration_seconds = info.length
+                    duration_minutes = int(duration_seconds // 60)
+                    duration_secs = int(duration_seconds % 60)
+                    metadata['Duration'] = f"{duration_minutes}:{duration_secs:02d}"
+                
+                if hasattr(info, 'bitrate'):
+                    bitrate = info.bitrate
+                    if bitrate:
+                        metadata['Bitrate'] = f"{bitrate // 1000} kbps"
+                
+                if hasattr(info, 'sample_rate'):
+                    sample_rate = info.sample_rate
+                    if sample_rate:
+                        metadata['Sample Rate'] = f"{sample_rate} Hz"
+                
+                if hasattr(info, 'channels'):
+                    channels = info.channels
+                    if channels:
+                        metadata['Channels'] = f"{channels} channel{'s' if channels > 1 else ''}"
+            
+            # Add file size
+            file_size = os.path.getsize(audio_path)
+            metadata['File Size'] = format_file_size(file_size)
+            
+    except ImportError:
+        print("Warning: mutagen library not available for metadata extraction")
+    except Exception as e:
+        print(f"Warning: Error extracting metadata: {e}")
+    
+    return metadata
+
+
 @app.route('/convert-audio-to-text', methods=['POST'])
 def convert_audio_to_text():
     """Convert uploaded audio files to text using OpenAI Whisper"""
@@ -2041,9 +2137,21 @@ def convert_audio_to_text():
                     markdown_filename = f"{base_name}.md"
                     markdown_path = os.path.join(temp_dir, markdown_filename)
                     
+                    # Extract audio metadata
+                    audio_metadata = extract_audio_metadata(audio_path)
+                    
                     # Convert transcribed text to Markdown format
                     markdown_content = f"# {base_name}\n\n"
                     markdown_content += f"*Transcribed from audio file: {filename}*\n\n"
+                    
+                    # Add metadata section if available
+                    if audio_metadata:
+                        markdown_content += f"## Audio Metadata\n\n"
+                        for key, value in audio_metadata.items():
+                            if value and value != 'Unknown':
+                                markdown_content += f"- **{key}**: {value}\n"
+                        markdown_content += f"\n"
+                    
                     markdown_content += f"## Transcript\n\n{transcribed_text}\n\n"
                     markdown_content += f"---\n*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} using OpenAI Whisper*"
                     
