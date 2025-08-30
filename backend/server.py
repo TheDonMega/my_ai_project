@@ -1495,18 +1495,137 @@ def query_with_model_stream():
             # Get context if including files
             context = ""
             sources = []
-            if include_files and kb:
-                relevant_docs = search_knowledge_base(question, kb, num_results=8)  # Increased for better coverage
-                if relevant_docs:
-                    context = "\n\n---\n\n".join([doc['section'] for doc in relevant_docs])
-                    sources = [{
-                        'filename': doc['filename'],
-                        'folder_path': doc['folder_path'],
-                        'relevance': doc['relevance'],
-                        'header': doc['header'] if doc['header'] else 'No header',
-                        'content': doc['section'],
-                        'full_document_available': True
-                    } for doc in relevant_docs]
+            
+            if include_files:
+                # Use MCP file tools instead of vector search
+                from file_tools_integration import FileToolsIntegration
+                tools = FileToolsIntegration()
+                
+                # Analyze the question to determine what file operations to perform
+                question_lower = question.lower()
+                
+                # Smart detection of file-related questions - more flexible approach
+                # Look for patterns that indicate the user wants to find, search, or access files
+                file_operation_indicators = [
+                    # Direct file operations
+                    'find', 'search', 'grep', 'list', 'show', 'get',
+                    # Time-based queries
+                    'latest', 'last', 'recent', 'newest', 'oldest',
+                    # Content-based queries
+                    'contain', 'mention', 'include', 'about',
+                    # File system concepts
+                    'file', 'note', 'document', 'content',
+                    # Possessive/ownership indicators
+                    'my', 'your', 'have', 'got', 'exists',
+                    # Question patterns
+                    'what', 'when', 'where', 'which', 'how many'
+                ]
+                
+                # Check if the question is asking about files or content
+                is_file_question = any(indicator in question_lower for indicator in file_operation_indicators)
+                
+                # Additional context clues
+                has_date_pattern = any(pattern in question for pattern in ['/', '2025', '2024', '2023', 'today', 'yesterday'])
+                has_file_extension = any(ext in question_lower for ext in ['.md', '.txt', '.doc', '.pdf'])
+                is_asking_about_content = any(word in question_lower for word in ['content', 'text', 'data', 'information'])
+                
+                # If it's a file-related question or has specific patterns, use file tools
+                if is_file_question or has_date_pattern or has_file_extension or is_asking_about_content:
+                    file_context = ""
+                    
+                    # Determine what type of file operation to perform based on the question
+                    
+                    # 1. If asking about specific content or terms
+                    if any(word in question_lower for word in ['contain', 'mention', 'about', 'search']):
+                        # Extract potential search terms from the question
+                        # Remove common words and keep meaningful terms
+                        common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
+                        words = question.split()
+                        search_terms = [word.lower() for word in words if len(word) > 2 and word.lower() not in common_words]
+                        
+                        if search_terms:
+                            # Search for the most relevant terms
+                            for term in search_terms[:3]:  # Limit to 3 terms to avoid too many results
+                                search_result = tools.grep_content(term, "", False, 3)
+                                if search_result.get("success") and search_result.get("results"):
+                                    file_context += f"Files containing '{term}':\n"
+                                    for result in search_result["results"]:
+                                        file_context += f"- {result['filename']}: {len(result['matches'])} matches\n"
+                                        # Get a preview of the content
+                                        if len(result['matches']) > 0:
+                                            content_result = tools.get_file_content(result['filename'], "")
+                                            if content_result.get("success"):
+                                                file_context += f"  Preview: {content_result['content'][:300]}...\n\n"
+                    
+                    # 2. If asking about latest/recent files
+                    elif any(word in question_lower for word in ['latest', 'last', 'recent', 'newest']):
+                        # Find latest files in different directories
+                        directories = ["", "Medscribe", "QA", "Agent"]  # Add more directories as needed
+                        for directory in directories:
+                            latest_result = tools.find_latest_file(directory, "*.md")
+                            if latest_result.get("success"):
+                                latest_file = latest_result["latest_file"]
+                                file_context += f"Latest file in {directory or 'root'}: {latest_file['filename']} (modified: {latest_file['modified_human']})\n"
+                                
+                                # Get content of the latest file
+                                content_result = tools.get_file_content(latest_file['filename'], directory)
+                                if content_result.get("success"):
+                                    file_context += f"Content: {content_result['content'][:1000]}...\n\n"
+                    
+                    # 3. If asking about specific dates
+                    elif has_date_pattern:
+                        # Search for date patterns in files
+                        date_patterns = ['8/', '9/', '10/', '11/', '12/', '1/', '2/', '3/', '4/', '5/', '6/', '7/']
+                        for pattern in date_patterns:
+                            if pattern in question:
+                                search_result = tools.grep_content(pattern, "", False, 5)
+                                if search_result.get("success") and search_result.get("results"):
+                                    file_context += f"Files containing date pattern '{pattern}':\n"
+                                    for result in search_result["results"]:
+                                        file_context += f"- {result['filename']}: {len(result['matches'])} matches\n"
+                                        # Get content for date-specific files
+                                        content_result = tools.get_file_content(result['filename'], "")
+                                        if content_result.get("success"):
+                                            file_context += f"  Content: {content_result['content'][:800]}...\n\n"
+                    
+                    # 4. If asking about specific file types or extensions
+                    elif has_file_extension:
+                        # List files with specific extensions
+                        list_result = tools.list_files("", "modified", True)
+                        if list_result.get("success") and list_result.get("files"):
+                            file_context += "Files in knowledge base:\n"
+                            for file_info in list_result["files"][:10]:  # Show top 10 files
+                                file_context += f"- {file_info['filename']} (modified: {file_info['modified_human']})\n"
+                    
+                    # 5. If asking about existence or general file questions
+                    elif any(word in question_lower for word in ['have', 'got', 'exists', 'any', 'what']):
+                        # List recent files to provide context
+                        list_result = tools.list_files("", "modified", True)
+                        if list_result.get("success") and list_result.get("files"):
+                            file_context += "Recent files in knowledge base:\n"
+                            for file_info in list_result["files"][:5]:  # Show top 5 recent files
+                                file_context += f"- {file_info['filename']} (modified: {file_info['modified_human']})\n"
+                    
+                    # 6. Default: If no specific pattern matches, provide general file overview
+                    else:
+                        # List recent files to provide context
+                        list_result = tools.list_files("", "modified", True)
+                        if list_result.get("success") and list_result.get("files"):
+                            file_context += "Recent files in knowledge base:\n"
+                            for file_info in list_result["files"][:5]:  # Show top 5 recent files
+                                file_context += f"- {file_info['filename']} (modified: {file_info['modified_human']})\n"
+                    
+                    if file_context:
+                        context = file_context
+                        # Create sources from the file operations
+                        sources = [{
+                            'filename': 'File Tools Search',
+                            'folder_path': 'MCP Tools',
+                            'relevance': 100,
+                            'header': 'File Operation Results',
+                            'content': file_context[:500] + "..." if len(file_context) > 500 else file_context,
+                            'full_document_available': True
+                        }]
             
             # Send metadata first
             yield f"data: {{\"sources\": {json.dumps(sources)}, \"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"

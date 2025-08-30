@@ -500,13 +500,35 @@ class ModelManager:
         
         try:
             # Check if the question is about file operations
-            file_keywords = ["latest", "last", "file", "note", "document", "medscribe", "search", "find", "grep", "when was", "added", "modified", "timestamp"]
+            file_keywords = [
+                # Direct file operations
+                'latest', 'last', 'file', 'note', 'document', 'search', 'find', 'grep', 'list', 'show', 'get',
+                # Time-based queries
+                'when was', 'added', 'modified', 'timestamp', 'recent', 'newest', 'oldest',
+                # Content-based queries
+                'contain', 'mention', 'include', 'about', 'content', 'text', 'data',
+                # Possessive/ownership indicators
+                'my', 'your', 'have', 'got', 'exists', 'any',
+                # Question patterns that often indicate file queries
+                'what', 'when', 'where', 'which', 'how many'
+            ]
             date_patterns = ["8/", "9/", "10/", "11/", "12/", "1/", "2/", "3/", "4/", "5/", "6/", "7/", "2025", "2024", "2023"]
-            is_file_question = any(keyword in prompt.lower() for keyword in file_keywords) or any(pattern in prompt for pattern in date_patterns)
             
-            # Automatically use file tools if it's a file-related question
+            # More intelligent detection - look for patterns that suggest file operations
+            is_file_question = (
+                any(keyword in prompt.lower() for keyword in file_keywords) or 
+                any(pattern in prompt for pattern in date_patterns) or
+                # Check for question patterns that often indicate file queries
+                (prompt.lower().startswith(('what', 'when', 'where', 'which', 'how')) and 
+                 any(word in prompt.lower() for word in ['file', 'note', 'document', 'content', 'have', 'got', 'latest', 'last']))
+            )
+            
+            # Check if we have file context from MCP tools
+            has_mcp_context = context and ("MCP-related files" in context or "File Tools Search" in context or "Latest file" in context)
+            
+            # Automatically use file tools if it's a file-related question and no MCP context provided
             file_context = ""
-            if is_file_question:
+            if is_file_question and not has_mcp_context:
                 try:
                     import requests
                     
@@ -552,7 +574,7 @@ RESPONSE INSTRUCTIONS:
             
             # Prepare the full prompt with personality
             if file_context:
-                # If we have file context, put it FIRST and make it the primary focus
+                # If we have file context from automatic detection, put it FIRST and make it the primary focus
                 full_prompt = f"""{file_context}
 
 USER QUESTION: {prompt}
@@ -566,6 +588,21 @@ RESPONSE REQUIREMENTS:
 - For date-specific questions, clearly state whether that date exists in the notes
 - Do NOT suggest any commands, tools, or external APIs
 - Do NOT mention MCP, Microsoft, or any other systems"""
+            elif has_mcp_context:
+                # If we have MCP file context from the server, use it
+                full_prompt = f"""FILE OPERATION RESULTS:
+{context}
+
+USER QUESTION: {prompt}
+
+RESPONSE INSTRUCTIONS:
+- Use the file operation results provided above to answer the user's question
+- If the user asked about MCP, focus on the MCP-related files found
+- If the user asked about latest files, provide information about the most recent files
+- If the user asked about specific search terms, show what was found
+- Be specific about file names, dates, and content
+- Do NOT suggest using any tools or commands - the file operations have already been performed
+- Provide a clear, helpful response based on the file data shown above"""
             else:
                 # Regular prompt construction without file context
                 full_prompt = prompt
@@ -598,6 +635,9 @@ Please respond according to your personality and provide a helpful answer based 
             if file_context:
                 print(f"📁 File context included: {len(file_context)} characters")
                 print(f"📄 File context preview: {file_context[:200]}...")
+            elif has_mcp_context:
+                print(f"🔧 MCP file context included: {len(context)} characters")
+                print(f"📄 MCP context preview: {context[:200]}...")
             
             response = requests.post(f"{self.ollama_url}/api/generate", json={
                 "model": selected,
