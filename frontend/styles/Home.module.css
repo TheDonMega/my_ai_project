@@ -2,18 +2,26 @@
 
 .header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
   margin-bottom: 30px;
   padding-bottom: 20px;
   border-bottom: 2px solid #e9ecef;
+  text-align: center;
 }
 
 .header h1 {
-  margin: 0;
+  margin: 0 0 20px 0;
   color: #333;
   font-size: 2rem;
   font-weight: 700;
+}
+
+.convertButtons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: nowrap;
+  justify-content: center;
 }
 
 .convertButton {
@@ -30,6 +38,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .convertButton:hover {
@@ -666,9 +675,16 @@
     font-size: 1.8rem;
   }
   
+  .convertButtons {
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+  
   .convertButton {
     width: 100%;
     max-width: 300px;
+    justify-content: center;
   }
 }
 
@@ -677,8 +693,12 @@
     font-size: 1.5rem;
   }
   
+  .convertButtons {
+    gap: 10px;
+  }
+  
   .convertButton {
     font-size: 0.8rem;
-    padding: 10px 20px;
+    padding: 10px 16px;
   }
 }

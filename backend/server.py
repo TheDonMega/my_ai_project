@@ -1974,6 +1974,123 @@ def get_file_info():
         return jsonify({'error': f'Error getting file info: {str(e)}'}), 500
 
 
+@app.route('/convert-audio-to-text', methods=['POST'])
+def convert_audio_to_text():
+    """Convert uploaded audio files to text using OpenAI Whisper"""
+    try:
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+        
+        files = request.files.getlist('files')
+        
+        # Check if files were selected
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': 'No files selected'}), 400
+        
+        # Supported audio formats
+        supported_formats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma']
+        
+        # Check if all files are supported audio files
+        invalid_files = []
+        for file in files:
+            if file.filename == '':
+                continue
+            file_ext = os.path.splitext(file.filename.lower())[1]
+            if file_ext not in supported_formats:
+                invalid_files.append(file.filename)
+        
+        if invalid_files:
+            return jsonify({'error': f'Unsupported audio format. Supported formats: {", ".join(supported_formats)}. Invalid files: {", ".join(invalid_files)}'}), 400
+        
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            converted_files = []
+            
+            # Load Whisper model (CPU-optimized)
+            try:
+                import whisper
+                print("Loading Whisper model for CPU...")
+                model = whisper.load_model("base")  # Use base model for CPU efficiency
+                print("Whisper model loaded successfully")
+            except ImportError:
+                return jsonify({'error': 'Whisper library not available. Please install openai-whisper.'}), 500
+            except Exception as e:
+                return jsonify({'error': f'Failed to load Whisper model: {str(e)}'}), 500
+            
+            # Process each file
+            for file in files:
+                if file.filename == '':
+                    continue
+                    
+                # Secure the filename
+                filename = secure_filename(file.filename)
+                
+                # Save the uploaded file temporarily
+                audio_path = os.path.join(temp_dir, filename)
+                file.save(audio_path)
+                
+                try:
+                    # Transcribe audio using Whisper
+                    print(f"Transcribing {filename}...")
+                    result = model.transcribe(audio_path)
+                    transcribed_text = result["text"].strip()
+                    
+                    # Create the output filename (replace audio extension with .md)
+                    base_name = os.path.splitext(filename)[0]
+                    markdown_filename = f"{base_name}.md"
+                    markdown_path = os.path.join(temp_dir, markdown_filename)
+                    
+                    # Convert transcribed text to Markdown format
+                    markdown_content = f"# {base_name}\n\n"
+                    markdown_content += f"*Transcribed from audio file: {filename}*\n\n"
+                    markdown_content += f"## Transcript\n\n{transcribed_text}\n\n"
+                    markdown_content += f"---\n*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} using OpenAI Whisper*"
+                    
+                    # Write the markdown content to file
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(markdown_content)
+                    
+                    converted_files.append((markdown_path, markdown_filename))
+                    print(f"Successfully transcribed {filename}")
+                    
+                except Exception as e:
+                    return jsonify({'error': f'Transcription failed for {filename}: {str(e)}'}), 500
+            
+            # Return single file or create zip for multiple files
+            if len(converted_files) == 1:
+                # Single file - return directly
+                markdown_path, markdown_filename = converted_files[0]
+                return send_file(
+                    markdown_path,
+                    as_attachment=True,
+                    download_name=markdown_filename,
+                    mimetype='text/markdown'
+                )
+            else:
+                # Multiple files - create zip
+                import zipfile
+                zip_path = os.path.join(temp_dir, 'transcribed_files.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for markdown_path, markdown_filename in converted_files:
+                        zipf.write(markdown_path, markdown_filename)
+                
+                # Create zip filename based on first file
+                first_filename = os.path.splitext(secure_filename(files[0].filename))[0]
+                zip_filename = f"{first_filename}_and_{len(converted_files) - 1}_more_files.zip"
+                
+                return send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name=zip_filename,
+                    mimetype='application/zip'
+                )
+                
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
 if __name__ == "__main__":
     # Initialize knowledge base at startup
     reload_knowledge_base()

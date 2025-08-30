@@ -46,6 +46,11 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - Collapsible query options section
   - Persistent UI state with localStorage
   - Focused, clutter-free interface
+- **🎨 Modern UI Layout**: Professional, responsive design
+  - Centered header layout with balanced button arrangement
+  - Side-by-side conversion buttons for easy access
+  - Responsive design that adapts to different screen sizes
+  - Clean, modern styling with consistent visual hierarchy
 - **📄 Sources Display**: View found documents with relevant information
   - Shows filename, folder path, relevance score, and content preview
   - "View" button to see full document content in modal
@@ -59,12 +64,22 @@ An intelligent knowledge base analyzer that uses AI to search through markdown f
   - Automatic file download after conversion
   - Uses Microsoft's open-source markitdown library
   - Clean, modern conversion interface
+- **🎵 Audio to Markdown Conversion**: Convert audio files to Markdown format using OpenAI Whisper
+  - Upload multiple audio files and transcribe them to Markdown instantly
+  - Drag & drop or click to select multiple files
+  - Supports MP3, WAV, M4A, FLAC, OGG, AAC, WMA formats
+  - CPU-optimized Whisper model for local processing
+  - Preserves original filenames with .md extension
+  - Single file downloads as .md, multiple files as zip
+  - Automatic file download after transcription
+  - Clean, modern conversion interface
 - **Local Knowledge Base Search**: Searches through markdown files recursively, including subfolders
 - **Local AI Processing**: Uses Ollama for local AI model inference
 - **Real-time Knowledge Base Management**: Add documents without restarting containers
 - **Model Training**: Train custom Ollama models on your knowledge base
 - **Folder Structure Support**: Displays folder paths for better organization
 - **Modal Document Viewer**: View full documents with proper overlay
+- **Complete Document Workflow**: Convert DOCX and audio files to Markdown for seamless knowledge base integration
 
 ## 🎭 Behavior System
 
@@ -354,6 +369,22 @@ The frontend now features an interactive CLI-style interface:
 - **Visual Cursor**: Animated cursor for authentic CLI feel
 - **Response Streaming**: See responses generate in real-time
 - **Sources Display**: View found documents below CLI when files are included
+
+## 🎨 Modern User Interface
+
+The application features a clean, professional interface designed for optimal user experience:
+
+### **Header Layout:**
+- **Centered Design**: Main title and conversion buttons are centered for balanced appearance
+- **Side-by-Side Buttons**: Conversion buttons display horizontally with proper spacing
+- **Responsive Design**: Layout adapts to different screen sizes automatically
+- **Professional Styling**: Consistent visual hierarchy and modern aesthetics
+
+### **Conversion Buttons:**
+- **📄 Convert Notes to Markdown**: Quick access to DOCX conversion
+- **🎵 Convert Audio to Markdown**: Quick access to audio transcription
+- **Balanced Layout**: Buttons are evenly spaced and properly aligned
+- **Mobile-Friendly**: Stack vertically on smaller screens for better usability
 
 ### **Usage:**
 1. Type your question in the CLI input field
@@ -831,20 +862,22 @@ my_ai_project/
 │   ├── ollama_training_llama3.2_3b.jsonl
 │   └── ollama_training_data.json
 ├── backend/                 # Python Flask server
-│   ├── server.py           # Main server with personality, model management, and DOCX conversion
+│   ├── server.py           # Main server with personality, model management, and file conversions
 │   ├── ollama_trainer.py   # Model training and management
 │   ├── model_manager.py    # Model management and selection
 │   ├── train_knowledge_base.py  # Knowledge base indexing
-│   └── requirements.txt    # Python dependencies including markitdown[docx]
+│   └── requirements.txt    # Python dependencies including markitdown[docx] and Whisper
 ├── frontend/               # Next.js React application
 │   ├── pages/index.tsx     # Main interface with CLI and behavior selector
 │   ├── pages/convert-docx.tsx  # DOCX to Markdown conversion page
+│   ├── pages/convert-audio.tsx  # Audio to Markdown conversion page
 │   ├── components/         # React components
 │   │   ├── BehaviorSelector.tsx  # Personality selection component
 │   │   ├── ModelSelector.tsx     # Model selection component
 │   │   └── ...              # Other UI components
 │   ├── styles/            # CSS modules
 │   │   ├── ConvertDocx.module.css  # DOCX conversion page styles
+│   │   ├── ConvertAudio.module.css # Audio conversion page styles
 │   │   └── ...             # Other CSS modules
 ├── docker-compose.yml      # Container orchestration
 ├── update_personality.sh   # Convenience script
@@ -932,6 +965,21 @@ You are a creative, imaginative AI assistant:
 
 The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversion feature that allows you to easily convert Word documents to Markdown format for use in your knowledge base.
 
+## 🎵 Audio to Markdown Conversion
+
+The AI Knowledge Base Analyzer now includes a powerful Audio to Markdown conversion feature that allows you to easily transcribe audio files to Markdown format using OpenAI Whisper. This feature is optimized for CPU-only systems and supports multiple audio formats.
+
+## 🔄 Complete Conversion Workflow
+
+The AI Knowledge Base Analyzer provides a complete document conversion workflow:
+
+1. **📄 DOCX to Markdown**: Convert Word documents to Markdown format
+2. **🎵 Audio to Markdown**: Convert audio recordings to Markdown format
+3. **📚 Knowledge Base Integration**: All converted files are ready for your knowledge base
+4. **🤖 AI Analysis**: Your AI assistant can immediately search and analyze the converted content
+
+This workflow allows you to build a comprehensive knowledge base from various source formats, making all your content accessible to your local AI models.
+
 ### Features
 
 - **📤 Multiple File Upload**: Drag & drop or click to select multiple DOCX files
@@ -940,6 +988,16 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
 - **📦 Smart Download**: Single file downloads as .md, multiple files as zip
 - **⚡ Instant Conversion**: Fast conversion using Microsoft's markitdown library
 - **💾 Automatic Download**: Converted files are automatically downloaded
+- **🎨 Modern Interface**: Clean, responsive design that matches the app theme
+
+### Audio to Markdown Features
+
+- **📤 Multiple Audio Upload**: Drag & drop or click to select multiple audio files
+- **🔒 Format Validation**: Only accepts supported audio formats for security
+- **📝 Preserved Filenames**: Keeps original filenames with .md extension
+- **📦 Smart Download**: Single file downloads as .md, multiple files as zip
+- **⚡ CPU-Optimized**: Uses Whisper base model for efficient CPU processing
+- **💾 Automatic Download**: Transcribed files are automatically downloaded
 - **🎨 Modern Interface**: Clean, responsive design that matches the app theme
 
 ### How to Use
@@ -961,6 +1019,25 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
    - Multiple files: downloads as zip file with all converted files
    - Original filenames are preserved with .md extension
 
+### Audio to Markdown Usage
+
+1. **Access the Audio Converter**:
+   - Click the "🎵 Convert Audio to Markdown" button in the top-right corner of the main page
+   - Or navigate directly to `/convert-audio`
+
+2. **Upload Your Audio Files**:
+   - Click the upload area or drag and drop your audio files
+   - Select multiple files by holding Ctrl/Cmd while clicking
+   - Supported formats: MP3, WAV, M4A, FLAC, OGG, AAC, WMA
+   - File sizes and names are displayed for confirmation
+
+3. **Transcribe and Download**:
+   - Click "Transcribe to Markdown" button
+   - Files are processed using OpenAI Whisper (CPU-optimized)
+   - Single file: downloads as .md file
+   - Multiple files: downloads as zip file with all transcribed files
+   - Original filenames are preserved with .md extension
+
 ### Examples
 
 - **Single File**: 
@@ -971,6 +1048,16 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
   - Input: `Report.docx`, `Notes.docx`, `Summary.docx`
   - Output: `Report_and_2_more_files.zip` (contains all converted .md files)
 
+### Audio to Markdown Examples
+
+- **Single File**: 
+  - Input: `Meeting Recording.mp3`
+  - Output: `Meeting Recording.md` (automatically downloaded)
+
+- **Multiple Files**:
+  - Input: `Interview.wav`, `Presentation.m4a`, `Notes.flac`
+  - Output: `Interview_and_2_more_files.zip` (contains all transcribed .md files)
+
 ### Technical Details
 
 - **Library**: Uses Microsoft's open-source [markitdown](https://github.com/microsoft/markitdown) library
@@ -978,11 +1065,43 @@ The AI Knowledge Base Analyzer now includes a powerful DOCX to Markdown conversi
 - **Format Support**: Converts DOCX formatting to clean Markdown
 - **Error Handling**: Comprehensive error messages for invalid files or conversion failures
 
+### Audio to Markdown Technical Details
+
+- **Library**: Uses OpenAI's [Whisper](https://github.com/openai/whisper) model
+- **Dependencies**: Includes PyTorch, torchaudio, and FFmpeg for audio processing
+- **Model**: Uses Whisper "base" model optimized for CPU processing
+- **Format Support**: Supports MP3, WAV, M4A, FLAC, OGG, AAC, WMA formats
+- **Output Format**: Generates structured Markdown with headers, metadata, and timestamps
+- **Error Handling**: Comprehensive error messages for invalid files or transcription failures
+
+### System Dependencies
+
+The application now includes comprehensive audio processing capabilities:
+
+- **FFmpeg**: Installed in Docker container for audio format support
+- **PyTorch**: CPU-optimized for local processing without GPU requirements
+- **Whisper**: OpenAI's state-of-the-art speech recognition model
+- **Audio Formats**: Full support for common audio formats (MP3, WAV, M4A, FLAC, OGG, AAC, WMA)
+
 ### API Endpoint
 
 ```bash
 # Convert DOCX to Markdown (single or multiple files)
 POST /convert-docx-to-markdown
+Content-Type: multipart/form-data
+
+# Single file response: Markdown file download
+Content-Disposition: attachment; filename="original_name.md"
+
+# Multiple files response: Zip file download
+Content-Disposition: attachment; filename="firstfile_and_X_more_files.zip"
+```
+
+### Audio to Markdown API Endpoint
+
+```bash
+# Convert Audio to Markdown (single or multiple files)
+POST /convert-audio-to-text
 Content-Type: multipart/form-data
 
 # Single file response: Markdown file download
