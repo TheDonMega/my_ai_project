@@ -131,7 +131,7 @@ export default function ConvertAudio() {
         </button>
         <h1 className={styles.title}>Convert Audio to Markdown</h1>
         <p className={styles.subtitle}>
-          Upload your audio files and convert them to Markdown format using OpenAI Whisper.
+          Upload your audio files and convert them to Markdown format using OpenAI Whisper. Audio metadata will be automatically extracted and included.
         </p>
       </div>
 
@@ -215,7 +215,7 @@ export default function ConvertAudio() {
             <div className={styles.stepNumber}>2</div>
             <div className={styles.stepContent}>
               <h3>Transcribe with Whisper</h3>
-              <p>Click the transcribe button to process your audio</p>
+              <p>Click the transcribe button to process your audio and extract metadata</p>
             </div>
           </div>
           <div className={styles.step}>
@@ -230,6 +230,7 @@ export default function ConvertAudio() {
         <div className={styles.supportedFormats}>
           <h3>Supported Audio Formats</h3>
           <p>MP3, WAV, M4A, FLAC, OGG, AAC, WMA</p>
+          <p className={styles.metadataInfo}>📋 Audio metadata (title, artist, duration, etc.) will be automatically extracted and included in the Markdown output.</p>
         </div>
       </div>
     </div>
