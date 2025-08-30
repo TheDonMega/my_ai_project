@@ -49,6 +49,10 @@ MODEL_PRELOADED = False
 PERSONALITY_PROMPT = ""
 kb = []  # Global knowledge base variable
 
+# Conversation memory system
+conversation_history = []
+MAX_CONVERSATION_HISTORY = 10  # Keep last 10 exchanges
+
 def load_personality_prompt(behavior_filename: str = "behavior.md"):
     """Load personality/behavior prompt from specified behavior file"""
     global PERSONALITY_PROMPT
@@ -70,6 +74,33 @@ def get_personality_prompt():
     """Get the current personality prompt"""
     global PERSONALITY_PROMPT
     return PERSONALITY_PROMPT
+
+def add_to_conversation_history(user_question: str, ai_response: str):
+    """Add a conversation exchange to history"""
+    global conversation_history
+    conversation_history.append({
+        'user': user_question,
+        'ai': ai_response,
+        'timestamp': datetime.now().isoformat()
+    })
+    
+    # Keep only the last MAX_CONVERSATION_HISTORY exchanges
+    if len(conversation_history) > MAX_CONVERSATION_HISTORY:
+        conversation_history = conversation_history[-MAX_CONVERSATION_HISTORY:]
+
+def get_conversation_context() -> str:
+    """Get conversation history as context for the AI"""
+    global conversation_history
+    if not conversation_history:
+        return ""
+    
+    context = "\n=== CONVERSATION HISTORY ===\n"
+    for i, exchange in enumerate(conversation_history[-5:], 1):  # Last 5 exchanges
+        context += f"\nExchange {i}:\n"
+        context += f"User: {exchange['user']}\n"
+        context += f"AI: {exchange['ai'][:200]}...\n"  # Truncate AI response for context
+    context += "\n"
+    return context
 
 def preload_ollama_model():
     """Preload the best available Ollama model for faster responses"""
@@ -1501,6 +1532,9 @@ def query_with_model_stream():
             if model_name:
                 model_manager.set_selected_model(model_name)
             
+            # Get conversation context
+            conversation_context = get_conversation_context()
+            
             # Get context if including files
             context = ""
             sources = []
@@ -1550,7 +1584,7 @@ def query_with_model_stream():
                         # Extract potential search terms from the question
                         common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'do', 'i', 'on'}
                         words = question.split()
-                        search_terms = [word.lower() for word in words if len(word) > 2 and word.lower() not in common_words]
+                        search_terms = [word.lower().rstrip('?').rstrip('!').rstrip('.') for word in words if len(word) > 2 and word.lower() not in common_words]
                         
                         if search_terms:
                             file_context += "=== CONTENT SEARCH RESULTS ===\n"
@@ -1566,7 +1600,7 @@ def query_with_model_stream():
                                         # Get full content of files with matches
                                         content_result = tools.get_file_content(result['filename'], "")
                                         if content_result.get("success"):
-                                            file_context += f"    📄 Content: {content_result['content'][:800]}...\n\n"
+                                            file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
                                 else:
                                     file_context += f"\n❌ No files found containing '{term}'\n"
                     
@@ -1661,12 +1695,14 @@ def query_with_model_stream():
                 stream=True,
                 include_files=include_files,
                 context=context,
-                personality_prompt=get_personality_prompt()
+                personality_prompt=get_personality_prompt(),
+                conversation_context=conversation_context
             )
             
             if response_obj:
                 # Process Ollama's streaming response
                 response_count = 0
+                full_response = ""
                 for line in response_obj.iter_lines():
                     if line:
                         line_str = line.decode('utf-8')
@@ -1678,11 +1714,14 @@ def query_with_model_stream():
                                 # Escape any quotes in the response text
                                 response_text = data['response'].replace('"', '\\"').replace('\n', '\\n')
                                 yield f"data: {{\"response\": \"{response_text}\"}}\n\n"
+                                full_response += data['response']
                                 response_count += 1
                             
                             # Check if done - break out of the loop when done
                             if data.get('done', False):
                                 print(f"✅ Streaming completed with {response_count} response chunks")
+                                # Add to conversation history
+                                add_to_conversation_history(question, full_response)
                                 # Send done signal and break
                                 yield f"data: {{\"done\": true}}\n\n"
                                 break

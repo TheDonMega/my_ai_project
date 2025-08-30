@@ -491,7 +491,7 @@ class ModelManager:
         }
     
     def query_with_selected_model(self, prompt: str, stream: bool = False, 
-                                include_files: bool = True, context: str = "", personality_prompt: str = "") -> Optional[str]:
+                                include_files: bool = True, context: str = "", personality_prompt: str = "", conversation_context: str = "") -> Optional[str]:
         """Query using the selected model"""
         selected = self.get_selected_model()
         
@@ -524,13 +524,12 @@ class ModelManager:
             )
             
             # Check if we have file context from MCP tools
-            has_mcp_context = context and ("MCP-related files" in context or "File Tools Search" in context or "Latest file" in context)
+            has_mcp_context = context and ("=== CONTENT SEARCH RESULTS ===" in context or "=== LATEST FILES ===" in context or "MCP File Tools Search" in context or "File Operation Results" in context)
             
             # Automatically use file tools if it's a file-related question and no MCP context provided
             file_context = ""
             if is_file_question and not has_mcp_context:
                 try:
-                    import requests
                     
                     # Check if it's about notes (Medscribe is the default directory for notes)
                     if "note" in prompt.lower() or "medscribe" in prompt.lower() or "knowledge_base" in prompt.lower():
@@ -575,7 +574,7 @@ RESPONSE INSTRUCTIONS:
             # Prepare the full prompt with personality
             if file_context:
                 # If we have file context from automatic detection, put it FIRST and make it the primary focus
-                full_prompt = f"""{file_context}
+                full_prompt = f"""{conversation_context}{file_context}
 
 USER QUESTION: {prompt}
 
@@ -590,37 +589,41 @@ RESPONSE REQUIREMENTS:
 - Do NOT mention MCP, Microsoft, or any other systems"""
             elif has_mcp_context:
                 # If we have MCP file context from the server, use it
-                full_prompt = f"""FILE OPERATION RESULTS:
+                full_prompt = f"""{conversation_context}FILE OPERATION RESULTS FROM MCP TOOLS:
 {context}
 
 USER QUESTION: {prompt}
 
-RESPONSE INSTRUCTIONS:
-- Use the file operation results provided above to answer the user's question
-- If the user asked about MCP, focus on the MCP-related files found
-- If the user asked about latest files, provide information about the most recent files
-- If the user asked about specific search terms, show what was found
-- Be specific about file names, dates, and content
-- Do NOT suggest using any tools or commands - the file operations have already been performed
-- Provide a clear, helpful response based on the file data shown above"""
+CRITICAL RESPONSE INSTRUCTIONS:
+- The file operations have already been performed using MCP tools
+- Use ONLY the file operation results provided above to answer the user's question
+- If the user asked about specific content (like "MCP"), focus on the files that contain that content
+- If content search results are shown, prioritize those over latest files
+- Be specific about file names, dates, and content found
+- Show the ACTUAL content of the files, not just match counts
+- Do NOT suggest using any tools or commands - everything has already been searched
+- Do NOT fall back to talking about "latest notes" unless specifically asked
+- If the user asked "What notes do I have on X", show them the files that actually contain X
+- Provide a comprehensive response based on the search results shown above
+- If the user asks to review specific files mentioned in previous conversation, focus on those files"""
             else:
                 # Regular prompt construction without file context
                 full_prompt = prompt
                 if personality_prompt:
-                    full_prompt = f"""{personality_prompt}
+                    full_prompt = f"""{conversation_context}{personality_prompt}
 
 User question: {prompt}
 
 Please respond according to your personality and provide a helpful answer."""
                 elif include_files and context:
-                    full_prompt = f"""Context from knowledge base:
+                    full_prompt = f"""{conversation_context}Context from knowledge base:
 {context}
 
 User question: {prompt}
 
 Please provide a helpful response based on the context provided. If the context doesn't contain enough information, say so clearly."""
                 elif include_files and context and personality_prompt:
-                    full_prompt = f"""{personality_prompt}
+                    full_prompt = f"""{conversation_context}{personality_prompt}
 
 Context from knowledge base:
 {context}
