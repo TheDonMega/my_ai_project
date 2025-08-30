@@ -39,6 +39,7 @@ COPY backend/ollama_trainer.py .
 COPY backend/llamaindex_manager.py .
 COPY backend/model_manager.py .
 COPY backend/mcp_server.py .
+COPY backend/file_tools_integration.py .
 
 # Create knowledge base directory (will be mounted as volume)
 RUN mkdir -p /app/knowledge_base
