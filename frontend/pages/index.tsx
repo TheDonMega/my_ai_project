@@ -358,12 +358,20 @@ Ready for your first question!`;
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>AI Knowledge Base Assistant</h1>
-        <button 
-          onClick={() => router.push('/convert-docx')}
-          className={styles.convertButton}
-        >
-          📄 Convert Notes to Markdown
-        </button>
+        <div className={styles.convertButtons}>
+          <button 
+            onClick={() => router.push('/convert-docx')}
+            className={styles.convertButton}
+          >
+            📄 Convert Notes to Markdown
+          </button>
+          <button 
+            onClick={() => router.push('/convert-audio')}
+            className={styles.convertButton}
+          >
+            🎵 Convert Audio to Markdown
+          </button>
+        </div>
       </div>
       
       {/* Feedback notification removed - not used in current interface */}

@@ -1665,6 +1665,432 @@ def convert_docx_to_markdown():
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
+# --- File Operation Tools (MCP-style) ---
+
+def format_file_size(size_bytes: int) -> str:
+    """Format file size in human readable format"""
+    if size_bytes == 0:
+        return "0B"
+    size_names = ["B", "KB", "MB", "GB"]
+    i = 0
+    while size_bytes >= 1024 and i < len(size_names) - 1:
+        size_bytes /= 1024.0
+        i += 1
+    return f"{size_bytes:.1f}{size_names[i]}"
+
+def format_file_info(file_path: str, relative_path: str) -> dict:
+    """Format file information for display"""
+    try:
+        stat = os.stat(file_path)
+        return {
+            "filename": os.path.basename(file_path),
+            "path": relative_path,
+            "size": stat.st_size,
+            "size_human": format_file_size(stat.st_size),
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "modified_human": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+            "is_file": os.path.isfile(file_path),
+            "is_dir": os.path.isdir(file_path)
+        }
+    except Exception as e:
+        return {"filename": os.path.basename(file_path), "path": relative_path, "error": str(e)}
+
+@app.route('/tools/list-files', methods=['POST'])
+def list_files():
+    """List files in the knowledge base directory with detailed information"""
+    try:
+        data = request.get_json() or {}
+        directory = data.get('directory', '')
+        sort_by = data.get('sort_by', 'modified')
+        reverse = data.get('reverse', True)
+        
+        kb_path = "/app/knowledge_base"
+        target_path = os.path.join(kb_path, directory) if directory else kb_path
+        
+        if not os.path.exists(target_path):
+            return jsonify({'error': f'Directory not found: {directory}'}), 404
+        
+        files = []
+        for item in os.listdir(target_path):
+            item_path = os.path.join(target_path, item)
+            relative_path = os.path.relpath(item_path, kb_path)
+            file_info = format_file_info(item_path, relative_path)
+            files.append(file_info)
+        
+        # Sort files
+        if sort_by == "name":
+            files.sort(key=lambda x: x["filename"], reverse=reverse)
+        elif sort_by == "size":
+            files.sort(key=lambda x: x.get("size", 0), reverse=reverse)
+        else:  # modified
+            files.sort(key=lambda x: x.get("modified", ""), reverse=reverse)
+        
+        return jsonify({
+            'success': True,
+            'directory': directory or 'knowledge_base',
+            'files': files,
+            'count': len(files)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error listing files: {str(e)}'}), 500
+
+@app.route('/tools/find-latest-file', methods=['POST'])
+def find_latest_file():
+    """Find the most recently modified file in a directory"""
+    try:
+        data = request.get_json() or {}
+        directory = data.get('directory', '')
+        pattern = data.get('pattern', '*.md')
+        
+        kb_path = "/app/knowledge_base"
+        target_path = os.path.join(kb_path, directory) if directory else kb_path
+        
+        if not os.path.exists(target_path):
+            return jsonify({'error': f'Directory not found: {directory}'}), 404
+        
+        # Find all files matching pattern
+        import glob
+        search_pattern = os.path.join(target_path, "**", pattern)
+        matching_files = glob.glob(search_pattern, recursive=True)
+        
+        if not matching_files:
+            return jsonify({'error': f'No files found matching pattern "{pattern}" in {directory or "knowledge_base"}'}), 404
+        
+        # Get file info for all matching files
+        files = []
+        for file_path in matching_files:
+            relative_path = os.path.relpath(file_path, kb_path)
+            file_info = format_file_info(file_path, relative_path)
+            files.append(file_info)
+        
+        # Sort by modification time (newest first)
+        files.sort(key=lambda x: x.get("modified", ""), reverse=True)
+        
+        latest_file = files[0]
+        
+        return jsonify({
+            'success': True,
+            'latest_file': latest_file,
+            'directory': directory or 'knowledge_base',
+            'pattern': pattern
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error finding latest file: {str(e)}'}), 500
+
+@app.route('/tools/search-files', methods=['POST'])
+def search_files():
+    """Search for files by name or pattern"""
+    try:
+        data = request.get_json() or {}
+        query = data.get('query', '')
+        directory = data.get('directory', '')
+        case_sensitive = data.get('case_sensitive', False)
+        
+        if not query:
+            return jsonify({'error': 'Query parameter is required'}), 400
+        
+        kb_path = "/app/knowledge_base"
+        target_path = os.path.join(kb_path, directory) if directory else kb_path
+        
+        if not os.path.exists(target_path):
+            return jsonify({'error': f'Directory not found: {directory}'}), 404
+        
+        # Convert query to search pattern
+        if not case_sensitive:
+            query = query.lower()
+        
+        # Search recursively
+        matching_files = []
+        for root, dirs, files in os.walk(target_path):
+            for file in files:
+                filename = file if case_sensitive else file.lower()
+                if query in filename:
+                    file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, kb_path)
+                    file_info = format_file_info(file_path, relative_path)
+                    matching_files.append(file_info)
+        
+        # Sort by modification time (newest first)
+        matching_files.sort(key=lambda x: x.get("modified", ""), reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'query': query,
+            'directory': directory or 'knowledge_base',
+            'files': matching_files,
+            'count': len(matching_files)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error searching files: {str(e)}'}), 500
+
+@app.route('/tools/grep-content', methods=['POST'])
+def grep_content():
+    """Search file contents for a specific term (like grep)"""
+    try:
+        data = request.get_json() or {}
+        search_term = data.get('search_term', '')
+        directory = data.get('directory', '')
+        case_sensitive = data.get('case_sensitive', False)
+        max_results = data.get('max_results', 10)
+        
+        if not search_term:
+            return jsonify({'error': 'Search term is required'}), 400
+        
+        kb_path = "/app/knowledge_base"
+        target_path = os.path.join(kb_path, directory) if directory else kb_path
+        
+        if not os.path.exists(target_path):
+            return jsonify({'error': f'Directory not found: {directory}'}), 404
+        
+        if not case_sensitive:
+            search_term = search_term.lower()
+        
+        results = []
+        
+        # Search recursively through markdown files
+        for root, dirs, files in os.walk(target_path):
+            for file in files:
+                if file.endswith('.md'):
+                    file_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(file_path, kb_path)
+                    
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        
+                        # Search in content
+                        content_to_search = content if case_sensitive else content.lower()
+                        if search_term in content_to_search:
+                            # Find line numbers and context
+                            lines = content.split('\n')
+                            matches = []
+                            
+                            for i, line in enumerate(lines, 1):
+                                line_to_search = line if case_sensitive else line.lower()
+                                if search_term in line_to_search:
+                                    # Get context (previous and next lines)
+                                    start = max(0, i - 2)
+                                    end = min(len(lines), i + 1)
+                                    context = lines[start:end]
+                                    
+                                    matches.append({
+                                        "line": i,
+                                        "context": context,
+                                        "matched_line": line
+                                    })
+                            
+                            if matches:
+                                results.append({
+                                    "file": relative_path,
+                                    "filename": file,
+                                    "matches": matches[:3]  # Limit matches per file
+                                })
+                    
+                    except Exception as e:
+                        print(f"Warning: Error reading file {file_path}: {e}")
+                        continue
+        
+        # Sort by number of matches (most matches first)
+        results.sort(key=lambda x: len(x["matches"]), reverse=True)
+        results = results[:max_results]
+        
+        return jsonify({
+            'success': True,
+            'search_term': search_term,
+            'directory': directory or 'knowledge_base',
+            'results': results,
+            'count': len(results)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error searching content: {str(e)}'}), 500
+
+@app.route('/tools/get-file-content', methods=['POST'])
+def get_file_content():
+    """Get the full content of a specific file"""
+    try:
+        data = request.get_json() or {}
+        filename = data.get('filename', '')
+        directory = data.get('directory', '')
+        
+        if not filename:
+            return jsonify({'error': 'Filename is required'}), 400
+        
+        kb_path = "/app/knowledge_base"
+        file_path = os.path.join(kb_path, directory, filename) if directory else os.path.join(kb_path, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'File not found: {filename}'}), 404
+        
+        if not os.path.isfile(file_path):
+            return jsonify({'error': f'Path is not a file: {filename}'}), 400
+        
+        # Get file info
+        relative_path = os.path.relpath(file_path, kb_path)
+        file_info = format_file_info(file_path, relative_path)
+        
+        # Read file content
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return jsonify({
+            'success': True,
+            'file_info': file_info,
+            'content': content
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error reading file: {str(e)}'}), 500
+
+@app.route('/tools/get-file-info', methods=['POST'])
+def get_file_info():
+    """Get detailed information about a specific file"""
+    try:
+        data = request.get_json() or {}
+        filename = data.get('filename', '')
+        directory = data.get('directory', '')
+        
+        if not filename:
+            return jsonify({'error': 'Filename is required'}), 400
+        
+        kb_path = "/app/knowledge_base"
+        file_path = os.path.join(kb_path, directory, filename) if directory else os.path.join(kb_path, filename)
+        
+        if not os.path.exists(file_path):
+            return jsonify({'error': f'File not found: {filename}'}), 404
+        
+        relative_path = os.path.relpath(file_path, kb_path)
+        file_info = format_file_info(file_path, relative_path)
+        
+        return jsonify({
+            'success': True,
+            'file_info': file_info
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error getting file info: {str(e)}'}), 500
+
+
+@app.route('/convert-audio-to-text', methods=['POST'])
+def convert_audio_to_text():
+    """Convert uploaded audio files to text using OpenAI Whisper"""
+    try:
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+        
+        files = request.files.getlist('files')
+        
+        # Check if files were selected
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'error': 'No files selected'}), 400
+        
+        # Supported audio formats
+        supported_formats = ['.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma']
+        
+        # Check if all files are supported audio files
+        invalid_files = []
+        for file in files:
+            if file.filename == '':
+                continue
+            file_ext = os.path.splitext(file.filename.lower())[1]
+            if file_ext not in supported_formats:
+                invalid_files.append(file.filename)
+        
+        if invalid_files:
+            return jsonify({'error': f'Unsupported audio format. Supported formats: {", ".join(supported_formats)}. Invalid files: {", ".join(invalid_files)}'}), 400
+        
+        # Create a temporary directory for processing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            converted_files = []
+            
+            # Load Whisper model (CPU-optimized)
+            try:
+                import whisper
+                print("Loading Whisper model for CPU...")
+                model = whisper.load_model("base")  # Use base model for CPU efficiency
+                print("Whisper model loaded successfully")
+            except ImportError:
+                return jsonify({'error': 'Whisper library not available. Please install openai-whisper.'}), 500
+            except Exception as e:
+                return jsonify({'error': f'Failed to load Whisper model: {str(e)}'}), 500
+            
+            # Process each file
+            for file in files:
+                if file.filename == '':
+                    continue
+                    
+                # Secure the filename
+                filename = secure_filename(file.filename)
+                
+                # Save the uploaded file temporarily
+                audio_path = os.path.join(temp_dir, filename)
+                file.save(audio_path)
+                
+                try:
+                    # Transcribe audio using Whisper
+                    print(f"Transcribing {filename}...")
+                    result = model.transcribe(audio_path)
+                    transcribed_text = result["text"].strip()
+                    
+                    # Create the output filename (replace audio extension with .md)
+                    base_name = os.path.splitext(filename)[0]
+                    markdown_filename = f"{base_name}.md"
+                    markdown_path = os.path.join(temp_dir, markdown_filename)
+                    
+                    # Convert transcribed text to Markdown format
+                    markdown_content = f"# {base_name}\n\n"
+                    markdown_content += f"*Transcribed from audio file: {filename}*\n\n"
+                    markdown_content += f"## Transcript\n\n{transcribed_text}\n\n"
+                    markdown_content += f"---\n*Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} using OpenAI Whisper*"
+                    
+                    # Write the markdown content to file
+                    with open(markdown_path, 'w', encoding='utf-8') as f:
+                        f.write(markdown_content)
+                    
+                    converted_files.append((markdown_path, markdown_filename))
+                    print(f"Successfully transcribed {filename}")
+                    
+                except Exception as e:
+                    return jsonify({'error': f'Transcription failed for {filename}: {str(e)}'}), 500
+            
+            # Return single file or create zip for multiple files
+            if len(converted_files) == 1:
+                # Single file - return directly
+                markdown_path, markdown_filename = converted_files[0]
+                return send_file(
+                    markdown_path,
+                    as_attachment=True,
+                    download_name=markdown_filename,
+                    mimetype='text/markdown'
+                )
+            else:
+                # Multiple files - create zip
+                import zipfile
+                zip_path = os.path.join(temp_dir, 'transcribed_files.zip')
+                
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for markdown_path, markdown_filename in converted_files:
+                        zipf.write(markdown_path, markdown_filename)
+                
+                # Create zip filename based on first file
+                first_filename = os.path.splitext(secure_filename(files[0].filename))[0]
+                zip_filename = f"{first_filename}_and_{len(converted_files) - 1}_more_files.zip"
+                
+                return send_file(
+                    zip_path,
+                    as_attachment=True,
+                    download_name=zip_filename,
+                    mimetype='application/zip'
+                )
+                
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
 if __name__ == "__main__":
     # Initialize knowledge base at startup
     reload_knowledge_base()

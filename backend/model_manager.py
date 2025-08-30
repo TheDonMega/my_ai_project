@@ -499,23 +499,91 @@ class ModelManager:
             return None
         
         try:
+            # Check if the question is about file operations
+            file_keywords = ["latest", "last", "file", "note", "document", "medscribe", "search", "find", "grep", "when was", "added", "modified", "timestamp"]
+            date_patterns = ["8/", "9/", "10/", "11/", "12/", "1/", "2/", "3/", "4/", "5/", "6/", "7/", "2025", "2024", "2023"]
+            is_file_question = any(keyword in prompt.lower() for keyword in file_keywords) or any(pattern in prompt for pattern in date_patterns)
+            
+            # Automatically use file tools if it's a file-related question
+            file_context = ""
+            if is_file_question:
+                try:
+                    import requests
+                    
+                    # Check if it's about notes (Medscribe is the default directory for notes)
+                    if "note" in prompt.lower() or "medscribe" in prompt.lower() or "knowledge_base" in prompt.lower():
+                        # Find the latest file
+                        latest_response = requests.post("http://localhost:5557/tools/find-latest-file", 
+                                                      json={"directory": "Medscribe", "pattern": "*.md"})
+                        if latest_response.status_code == 200:
+                            latest_data = latest_response.json()
+                            if latest_data.get("success"):
+                                latest_file = latest_data["latest_file"]
+                                
+                                # Get the file content
+                                content_response = requests.post("http://localhost:5557/tools/get-file-content", 
+                                                               json={"filename": latest_file["filename"], "directory": "Medscribe"})
+                                if content_response.status_code == 200:
+                                    content_data = content_response.json()
+                                    if content_data.get("success"):
+                                        file_context = f"""
+
+CRITICAL: I have already retrieved your actual file data. DO NOT suggest any commands or tools. Here is your last note:
+
+YOUR LAST NOTE:
+Filename: {latest_file['filename']}
+Date Added: {latest_file['modified_human']}
+File Size: {latest_file['size_human']}
+
+CONTENTS OF YOUR LAST NOTE:
+{content_data['content']}
+
+RESPONSE INSTRUCTIONS: 
+1. If the user asks about a specific date (like "8/2/2025"), search through the note content for that exact date
+2. If the user asks about the last note, start with "Here is your last note:"
+3. Tell the user when it was added (use the date above)
+4. Show the relevant contents of the file
+5. For date-specific questions, clearly state whether that date exists in the notes (e.g., "No, there are no notes for 8/2/2025")
+6. Do NOT suggest any commands, tools, or external APIs
+7. Use ONLY the data provided above"""
+                
+                except Exception as e:
+                    file_context = f"\n\nNote: Unable to retrieve file data automatically: {str(e)}"
+            
             # Prepare the full prompt with personality
-            full_prompt = prompt
-            if personality_prompt:
-                full_prompt = f"""{personality_prompt}
+            if file_context:
+                # If we have file context, put it FIRST and make it the primary focus
+                full_prompt = f"""{file_context}
+
+USER QUESTION: {prompt}
+
+RESPONSE REQUIREMENTS:
+- You MUST use the file data provided above
+- If asked about a specific date, search through the note content for that date
+- If asked about the last note, start with "Here is your last note:"
+- Show the date it was added
+- Show the relevant contents (only the specific date if asked about one)
+- For date-specific questions, clearly state whether that date exists in the notes
+- Do NOT suggest any commands, tools, or external APIs
+- Do NOT mention MCP, Microsoft, or any other systems"""
+            else:
+                # Regular prompt construction without file context
+                full_prompt = prompt
+                if personality_prompt:
+                    full_prompt = f"""{personality_prompt}
 
 User question: {prompt}
 
 Please respond according to your personality and provide a helpful answer."""
-            elif include_files and context:
-                full_prompt = f"""Context from knowledge base:
+                elif include_files and context:
+                    full_prompt = f"""Context from knowledge base:
 {context}
 
 User question: {prompt}
 
 Please provide a helpful response based on the context provided. If the context doesn't contain enough information, say so clearly."""
-            elif include_files and context and personality_prompt:
-                full_prompt = f"""{personality_prompt}
+                elif include_files and context and personality_prompt:
+                    full_prompt = f"""{personality_prompt}
 
 Context from knowledge base:
 {context}
@@ -524,7 +592,13 @@ User question: {prompt}
 
 Please respond according to your personality and provide a helpful answer based on the context provided. If the context doesn't contain enough information, say so clearly."""
             
+            # Debug: Print the full prompt being sent to the AI
             print(f"🤖 Querying model {selected} with stream={stream}")
+            print(f"🔍 Full prompt length: {len(full_prompt)} characters")
+            if file_context:
+                print(f"📁 File context included: {len(file_context)} characters")
+                print(f"📄 File context preview: {file_context[:200]}...")
+            
             response = requests.post(f"{self.ollama_url}/api/generate", json={
                 "model": selected,
                 "prompt": full_prompt,
