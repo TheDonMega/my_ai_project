@@ -616,7 +616,15 @@ CRITICAL RESPONSE INSTRUCTIONS:
 - CRITICAL: Read the FULL CONTENT sections carefully and provide the exact information found there
 - CRITICAL: Do not make up or infer information - only use what is explicitly shown in the file content
 - CRITICAL: Use the actual file content provided, not any hard-coded examples
-- CRITICAL: Do not create fake dates or information - use only what is actually in the file"""
+- CRITICAL: Do not create fake dates or information - use only what is actually in the file
+- CRITICAL: Look for the exact name and date format shown in the file content
+- CRITICAL: Do not invent or hallucinate any information - use ONLY what is explicitly written in the file
+- CRITICAL: If the user asks about a specific person's passport expiration, look for that person's name in the file content
+- CRITICAL: If the user asks about a specific person's license expiration, look for that person's name in license-related files
+- CRITICAL: Do not mix up passport and license information - they are different documents
+- CRITICAL: The answer should be the exact date shown in the file, not any other date
+- CRITICAL: Do not make up dates like "2024-02-01 / 2026-02-01" - use only the actual dates from the file
+- CRITICAL: Pay attention to the specific document type mentioned in the user's question"""
             else:
                 # Regular prompt construction without file context
                 full_prompt = prompt
@@ -652,13 +660,14 @@ Please respond according to your personality and provide a helpful answer based 
             elif has_mcp_context:
                 print(f"🔧 MCP file context included: {len(context)} characters")
                 print(f"📄 MCP context preview: {context[:200]}...")
+                print(f"📄 FULL MCP context: {context}")
             
             response = requests.post(f"{self.ollama_url}/api/generate", json={
                 "model": selected,
                 "prompt": full_prompt,
                 "stream": stream,
                 "options": {
-                    "temperature": 0.3,
+                    "temperature": 0.1,  # Reduced from 0.3 to reduce hallucination
                     "top_p": 0.8,
                     "top_k": 40,
                     "num_predict": 2048,  # Increased from 200 to allow longer responses

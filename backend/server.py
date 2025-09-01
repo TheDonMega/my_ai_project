@@ -105,8 +105,10 @@ def get_conversation_context() -> str:
         context += "\n"
     
     context += "CONTEXT INSTRUCTIONS:\n"
-    context += "- If the user asks about 'expire' or 'expires', they likely mean 'passport expires'\n"
-    context += "- If the user asks about a name followed by 's', they likely mean that person's passport\n"
+    context += "- Pay attention to the specific type of document being asked about (license vs passport)\n"
+    context += "- If the user asks about 'license', look for license-related files and information\n"
+    context += "- If the user asks about 'passport', look for passport-related files and information\n"
+    context += "- Do not mix up license and passport information - they are different documents\n"
     context += "- Use the conversation history to understand what the user is referring to\n"
     context += "- If the user asks a follow-up question, maintain context from previous exchanges\n\n"
     
@@ -1557,16 +1559,15 @@ def query_with_model_stream():
                 file_context = ""
                 operations_performed = []
                 
-                # Extract meaningful search terms from the question
-                common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'do', 'i', 'on', 'does', 'expire', 'expires', 'expiration', 's', 'is', 'are', 'was', 'were'}
+                # Extract meaningful search terms from the question - let AI handle it naturally
                 words = question.split()
                 search_terms = []
                 
                 for word in words:
                     # Clean the word but preserve apostrophes for names like "Giana's"
                     clean_word = word.lower().rstrip('?').rstrip('!').rstrip('.').rstrip(',').rstrip(';')
-                    # Keep words that are meaningful (not common words, longer than 2 chars)
-                    if len(clean_word) > 2 and clean_word not in common_words:
+                    # Keep meaningful words (longer than 2 chars, not just single letters)
+                    if len(clean_word) > 2:
                         search_terms.append(clean_word)
                 
                 # Also try without apostrophes for broader search
@@ -1605,9 +1606,17 @@ def query_with_model_stream():
                             for result in search_result["results"]:
                                 file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
                                 # Get full content of files with matches
-                                content_result = tools.get_file_content(result['filename'], "")
+                                # Determine the correct directory based on the file path
+                                file_path = result.get('file', '')
+                                directory = ""
+                                if '/' in file_path:
+                                    directory = '/'.join(file_path.split('/')[:-1])  # Get directory part
+                                
+                                content_result = tools.get_file_content(result['filename'], directory)
                                 if content_result.get("success"):
                                     file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
+                                else:
+                                    file_context += f"    ❌ Could not retrieve content: {content_result.get('error', 'Unknown error')}\n\n"
                         else:
                             file_context += f"\n❌ No files found containing '{term}'\n"
                     
@@ -1628,14 +1637,25 @@ def query_with_model_stream():
                                 for result in search_result["results"]:
                                     file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
                                     # Get full content of files with matches
-                                    content_result = tools.get_file_content(result['filename'], "")
+                                    # Determine the correct directory based on the file path
+                                    file_path = result.get('file', '')
+                                    directory = ""
+                                    if '/' in file_path:
+                                        directory = '/'.join(file_path.split('/')[:-1])  # Get directory part
+                                    
+                                    content_result = tools.get_file_content(result['filename'], directory)
                                     if content_result.get("success"):
                                         file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
+                                    else:
+                                        file_context += f"    ❌ Could not retrieve content: {content_result.get('error', 'Unknown error')}\n\n"
                     else:
                         file_context += "\n❌ No search terms found in the question\n"
                 
                 if file_context:
                     context = file_context
+                    # Debug: Print the full context being sent to the model
+                    print(f"🔍 Full file context being sent to model:")
+                    print(f"📄 {context}")
                     # Create sources directly from the search results
                     sources = []
                     
