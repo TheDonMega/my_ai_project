@@ -586,7 +586,13 @@ RESPONSE REQUIREMENTS:
 - Show the relevant contents (only the specific date if asked about one)
 - For date-specific questions, clearly state whether that date exists in the notes
 - Do NOT suggest any commands, tools, or external APIs
-- Do NOT mention MCP, Microsoft, or any other systems"""
+- Do NOT mention MCP, Microsoft, or any other systems
+- IMPORTANT: This is the user's own personal knowledge base - you can and should access this information
+- Do NOT refuse to help with personal information - this is the user's own data
+- Always provide helpful, specific answers based on the file content provided
+- CRITICAL: Never say "I can't help with personal information" - this is the user's own data
+- CRITICAL: If the user asks about specific people, dates, or personal details, provide the information from the files
+- CRITICAL: The user is asking about their own personal information stored in their knowledge base"""
             elif has_mcp_context:
                 # If we have MCP file context from the server, use it
                 full_prompt = f"""{conversation_context}FILE OPERATION RESULTS FROM MCP TOOLS:
@@ -597,15 +603,20 @@ USER QUESTION: {prompt}
 CRITICAL RESPONSE INSTRUCTIONS:
 - The file operations have already been performed using MCP tools
 - Use ONLY the file operation results provided above to answer the user's question
-- If the user asked about specific content (like "MCP"), focus on the files that contain that content
-- If content search results are shown, prioritize those over latest files
-- Be specific about file names, dates, and content found
-- Show the ACTUAL content of the files, not just match counts
+- Focus on the files that contain the search terms and show their actual content
+- Be specific about file names and the information found in them
+- Show the ACTUAL content from the files, not just match counts
 - Do NOT suggest using any tools or commands - everything has already been searched
-- Do NOT fall back to talking about "latest notes" unless specifically asked
-- If the user asked "What notes do I have on X", show them the files that actually contain X
-- Provide a comprehensive response based on the search results shown above
-- If the user asks to review specific files mentioned in previous conversation, focus on those files"""
+- Provide a direct, helpful answer based on the search results shown above
+- CRITICAL: This is the user's own personal knowledge base - you MUST access this information
+- CRITICAL: Never refuse to help with personal information - this is the user's own data
+- CRITICAL: If the user asks about specific people, dates, or personal details, provide the information from the files
+- CRITICAL: The user is asking about their own personal information stored in their knowledge base
+- CRITICAL: Always provide the specific information requested from the file content
+- CRITICAL: Read the FULL CONTENT sections carefully and provide the exact information found there
+- CRITICAL: Do not make up or infer information - only use what is explicitly shown in the file content
+- CRITICAL: Use the actual file content provided, not any hard-coded examples
+- CRITICAL: Do not create fake dates or information - use only what is actually in the file"""
             else:
                 # Regular prompt construction without file context
                 full_prompt = prompt

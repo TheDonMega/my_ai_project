@@ -95,11 +95,21 @@ def get_conversation_context() -> str:
         return ""
     
     context = "\n=== CONVERSATION HISTORY ===\n"
+    context += "IMPORTANT: Use this conversation history to understand context and references.\n"
+    context += "If the user asks a follow-up question, refer to the previous exchanges for context.\n\n"
+    
     for i, exchange in enumerate(conversation_history[-5:], 1):  # Last 5 exchanges
-        context += f"\nExchange {i}:\n"
+        context += f"Exchange {i}:\n"
         context += f"User: {exchange['user']}\n"
-        context += f"AI: {exchange['ai'][:200]}...\n"  # Truncate AI response for context
-    context += "\n"
+        context += f"AI: {exchange['ai'][:300]}...\n"  # Increased truncation for better context
+        context += "\n"
+    
+    context += "CONTEXT INSTRUCTIONS:\n"
+    context += "- If the user asks about 'expire' or 'expires', they likely mean 'passport expires'\n"
+    context += "- If the user asks about a name followed by 's', they likely mean that person's passport\n"
+    context += "- Use the conversation history to understand what the user is referring to\n"
+    context += "- If the user asks a follow-up question, maintain context from previous exchanges\n\n"
+    
     return context
 
 def preload_ollama_model():
@@ -1540,154 +1550,161 @@ def query_with_model_stream():
             sources = []
             
             if include_files and FILE_TOOLS_AVAILABLE:
-                # Use MCP file tools instead of vector search
+                # SIMPLE LOGIC: Always use MCP tools when checkbox is checked
                 tools = FileToolsIntegration()
                 
-                # Analyze the question to determine what file operations to perform
-                question_lower = question.lower()
+                # Initialize file context
+                file_context = ""
+                operations_performed = []
                 
-                # Smart detection of file-related questions - more flexible approach
-                # Look for patterns that indicate the user wants to find, search, or access files
-                file_operation_indicators = [
-                    # Direct file operations
-                    'find', 'search', 'grep', 'list', 'show', 'get',
-                    # Time-based queries
-                    'latest', 'last', 'recent', 'newest', 'oldest',
-                    # Content-based queries
-                    'contain', 'mention', 'include', 'about',
-                    # File system concepts
-                    'file', 'note', 'document', 'content',
-                    # Possessive/ownership indicators
-                    'my', 'your', 'have', 'got', 'exists',
-                    # Question patterns
-                    'what', 'when', 'where', 'which', 'how many'
-                ]
+                # Extract meaningful search terms from the question
+                common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'do', 'i', 'on', 'does', 'expire', 'expires', 'expiration', 's', 'is', 'are', 'was', 'were'}
+                words = question.split()
+                search_terms = []
                 
-                # Check if the question is asking about files or content
-                is_file_question = any(indicator in question_lower for indicator in file_operation_indicators)
+                for word in words:
+                    # Clean the word but preserve apostrophes for names like "Giana's"
+                    clean_word = word.lower().rstrip('?').rstrip('!').rstrip('.').rstrip(',').rstrip(';')
+                    # Keep words that are meaningful (not common words, longer than 2 chars)
+                    if len(clean_word) > 2 and clean_word not in common_words:
+                        search_terms.append(clean_word)
                 
-                # Additional context clues
-                has_date_pattern = any(pattern in question for pattern in ['/', '2025', '2024', '2023', 'today', 'yesterday'])
-                has_file_extension = any(ext in question_lower for ext in ['.md', '.txt', '.doc', '.pdf'])
-                is_asking_about_content = any(word in question_lower for word in ['content', 'text', 'data', 'information'])
+                # Also try without apostrophes for broader search
+                additional_terms = []
+                for term in search_terms:
+                    if "'" in term:
+                        # Add both with and without apostrophe
+                        additional_terms.append(term.replace("'", ""))
+                        # Also add the base name without 's for possessive forms
+                        if term.endswith("'s"):
+                            additional_terms.append(term[:-2])  # Remove 's
+                search_terms.extend(additional_terms)
                 
-                # If it's a file-related question or has specific patterns, use file tools
-                if is_file_question or has_date_pattern or has_file_extension or is_asking_about_content:
-                    file_context = ""
-                    operations_performed = []
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_search_terms = []
+                for term in search_terms:
+                    if term not in seen:
+                        seen.add(term)
+                        unique_search_terms.append(term)
+                search_terms = unique_search_terms
+                
+                # Debug: Print extracted search terms
+                print(f"🔍 Extracted search terms from '{question}': {search_terms}")
+                
+                # Always perform content search when checkbox is checked
+                if search_terms:
+                    file_context += "=== CONTENT SEARCH RESULTS ===\n"
+                    operations_performed.append("content_search")
                     
-                    # INTELLIGENT MULTI-OPERATION APPROACH
-                    # Instead of using elif, we'll perform multiple operations based on the question
-                    
-                    # 1. ALWAYS check for specific content/terms first (most important)
-                    if any(word in question_lower for word in ['contain', 'mention', 'about', 'search', 'have', 'what']):
-                        # Extract potential search terms from the question
-                        common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'do', 'i', 'on'}
-                        words = question.split()
-                        search_terms = [word.lower().rstrip('?').rstrip('!').rstrip('.') for word in words if len(word) > 2 and word.lower() not in common_words]
-                        
-                        if search_terms:
-                            file_context += "=== CONTENT SEARCH RESULTS ===\n"
-                            operations_performed.append("content_search")
-                            
-                            # Search for the most relevant terms
-                            for term in search_terms[:3]:  # Limit to 3 terms to avoid too many results
-                                search_result = tools.grep_content(term, "", False, 5)
-                                if search_result.get("success") and search_result.get("results"):
-                                    file_context += f"\n📁 Files containing '{term}':\n"
-                                    for result in search_result["results"]:
-                                        file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
-                                        # Get full content of files with matches
-                                        content_result = tools.get_file_content(result['filename'], "")
-                                        if content_result.get("success"):
-                                            file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
-                                else:
-                                    file_context += f"\n❌ No files found containing '{term}'\n"
-                    
-                    # 2. If asking about latest/recent files, ALSO check that
-                    if any(word in question_lower for word in ['latest', 'last', 'recent', 'newest']):
-                        file_context += "\n=== LATEST FILES ===\n"
-                        operations_performed.append("latest_files")
-                        
-                        # Find latest files in different directories
-                        directories = ["", "Medscribe", "QA", "Agent", "MCP"]  # Add more directories as needed
-                        for directory in directories:
-                            latest_result = tools.find_latest_file(directory, "*.md")
-                            if latest_result.get("success"):
-                                latest_file = latest_result["latest_file"]
-                                file_context += f"\n📁 Latest file in {directory or 'root'}: {latest_file['filename']} (modified: {latest_file['modified_human']})\n"
-                                
-                                # Get content of the latest file
-                                content_result = tools.get_file_content(latest_file['filename'], directory)
+                    # Search for the most relevant terms
+                    for term in search_terms[:3]:  # Limit to 3 terms to avoid too many results
+                        search_result = tools.grep_content(term, "", False, 5)
+                        if search_result.get("success") and search_result.get("results"):
+                            file_context += f"\n📁 Files containing '{term}':\n"
+                            for result in search_result["results"]:
+                                file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
+                                # Get full content of files with matches
+                                content_result = tools.get_file_content(result['filename'], "")
                                 if content_result.get("success"):
-                                    file_context += f"  📄 Content: {content_result['content'][:1000]}...\n\n"
+                                    file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
+                        else:
+                            file_context += f"\n❌ No files found containing '{term}'\n"
                     
-                    # 3. If asking about specific dates, ALSO check that
-                    if has_date_pattern:
-                        file_context += "\n=== DATE-SPECIFIC SEARCH ===\n"
-                        operations_performed.append("date_search")
+                # If no search terms found, try a broader search
+                else:
+                    file_context += "\n=== BROAD SEARCH ===\n"
+                    operations_performed.append("broad_search")
+                    
+                    # Try to find any relevant files by searching for common terms
+                    question_words = question.lower().split()
+                    potential_terms = [word for word in question_words if len(word) > 3]
+                    
+                    if potential_terms:
+                        for term in potential_terms[:2]:  # Try first 2 potential terms
+                            search_result = tools.grep_content(term, "", False, 3)
+                            if search_result.get("success") and search_result.get("results"):
+                                file_context += f"\n📁 Files containing '{term}':\n"
+                                for result in search_result["results"]:
+                                    file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
+                                    # Get full content of files with matches
+                                    content_result = tools.get_file_content(result['filename'], "")
+                                    if content_result.get("success"):
+                                        file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
+                    else:
+                        file_context += "\n❌ No search terms found in the question\n"
+                
+                if file_context:
+                    context = file_context
+                    # Create sources directly from the search results
+                    sources = []
+                    
+                    # Extract files that were found and create sources for them
+                    lines = file_context.split('\n')
+                    found_files = []
+                    
+                    for line in lines:
+                        if '• ' in line and '.md:' in line:
+                            filename = line.split('• ')[1].split(':')[0].strip()
+                            found_files.append(filename)
+                    
+                    # Create sources for each found file
+                    for filename in found_files:
+                        # Determine folder path based on filename
+                        folder_path = ""
+                        if 'passport' in filename.lower():
+                            folder_path = 'Personal/Passports'
+                        elif 'medscribe' in filename.lower():
+                            folder_path = 'Medscribe'
+                        elif 'mcp' in filename.lower():
+                            folder_path = 'MCP'
                         
-                        # Search for date patterns in files
-                        date_patterns = ['8/', '9/', '10/', '11/', '12/', '1/', '2/', '3/', '4/', '5/', '6/', '7/']
-                        for pattern in date_patterns:
-                            if pattern in question:
-                                search_result = tools.grep_content(pattern, "", False, 5)
-                                if search_result.get("success") and search_result.get("results"):
-                                    file_context += f"\n📅 Files containing date pattern '{pattern}':\n"
-                                    for result in search_result["results"]:
-                                        file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
-                                        # Get content for date-specific files
-                                        content_result = tools.get_file_content(result['filename'], "")
-                                        if content_result.get("success"):
-                                            file_context += f"    📄 Content: {content_result['content'][:800]}...\n\n"
-                    
-                    # 4. If asking about file types or general overview, ALSO provide that
-                    if has_file_extension or any(word in question_lower for word in ['list', 'show', 'all', 'overview']):
-                        file_context += "\n=== FILE OVERVIEW ===\n"
-                        operations_performed.append("file_overview")
+                        # Get the actual file content directly
+                        try:
+                            content_result = tools.get_file_content(filename, folder_path)
+                            if content_result.get("success"):
+                                content = content_result['content']
+                            else:
+                                content = f"File: {filename}\nLocation: {folder_path}\n\nContent could not be retrieved: {content_result.get('error', 'Unknown error')}"
+                        except Exception as e:
+                            content = f"File: {filename}\nLocation: {folder_path}\n\nContent could not be retrieved: {str(e)}"
                         
-                        # List recent files to provide context
-                        list_result = tools.list_files("", "modified", True)
-                        if list_result.get("success") and list_result.get("files"):
-                            file_context += "\n📋 Recent files in knowledge base:\n"
-                            for file_info in list_result["files"][:10]:  # Show top 10 files
-                                file_context += f"  • {file_info['filename']} (modified: {file_info['modified_human']})\n"
-                    
-                    # 5. If we haven't found anything specific, provide a comprehensive search
-                    if not operations_performed:
-                        file_context += "\n=== COMPREHENSIVE SEARCH ===\n"
-                        operations_performed.append("comprehensive_search")
+                        # Create the full path for the source
+                        full_filename = f"{folder_path}/{filename}" if folder_path else filename
                         
-                        # Try a broader search approach
-                        list_result = tools.list_files("", "modified", True)
-                        if list_result.get("success") and list_result.get("files"):
-                            file_context += "\n📋 All available files:\n"
-                            for file_info in list_result["files"][:15]:  # Show top 15 files
-                                file_context += f"  • {file_info['filename']} (modified: {file_info['modified_human']})\n"
-                    
-                    if file_context:
-                        context = file_context
-                        # Create sources from the file operations
-                        sources = [{
-                            'filename': 'MCP File Tools Search',
-                            'folder_path': 'MCP Tools',
+                        sources.append({
+                            'filename': full_filename,  # Use full path for consistency
+                            'folder_path': folder_path,
                             'relevance': 100,
-                            'header': f'File Operation Results ({", ".join(operations_performed)})',
-                            'content': file_context[:500] + "..." if len(file_context) > 500 else file_context,
+                            'header': f'Found in knowledge base search',
+                            'content': content[:500] + "..." if len(content) > 500 else content,
                             'full_document_available': True
-                        }]
-                        
-                        print(f"🔧 MCP Operations performed: {operations_performed}")
-                        print(f"📄 File context generated: {len(file_context)} characters")
+                        })
+                    
+                    print(f"🔧 MCP Operations performed: {operations_performed}")
+                    print(f"📄 File context generated: {len(file_context)} characters")
+                    print(f"📁 Sources created: {len(sources)}")
                 
             elif include_files and not FILE_TOOLS_AVAILABLE:
                 # Fallback to vector search if file tools are not available
                 print("⚠️ File tools not available, falling back to vector search")
-                context, sources = search_knowledge_base(question, top_k=5)
-                return context, sources
+                search_results = search_knowledge_base(question, kb, num_results=5)
+                if search_results:
+                    context = "\n\n---\n\n".join([doc['section'] for doc in search_results])
+                    sources = [{
+                        'filename': doc['filename'],
+                        'folder_path': doc['folder_path'],
+                        'relevance': doc['relevance'],
+                        'header': doc['header'] if doc['header'] else 'No header',
+                        'content': doc['section'][:500] + "..." if len(doc['section']) > 500 else doc['section'],
+                        'full_document_available': True
+                    } for doc in search_results]
+                else:
+                    context = "No relevant files found in knowledge base."
+                    sources = []
             
-            # Send metadata first
-            yield f"data: {{\"sources\": {json.dumps(sources)}, \"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
+            # Send initial metadata (without sources)
+            yield f"data: {{\"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
             
             # Stream the response
             response_obj = model_manager.query_with_selected_model(
@@ -1722,6 +1739,9 @@ def query_with_model_stream():
                                 print(f"✅ Streaming completed with {response_count} response chunks")
                                 # Add to conversation history
                                 add_to_conversation_history(question, full_response)
+                                # Send sources after AI response is complete
+                                if sources:
+                                    yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
                                 # Send done signal and break
                                 yield f"data: {{\"done\": true}}\n\n"
                                 break
@@ -1733,6 +1753,9 @@ def query_with_model_stream():
                 # Ensure we send a final done signal if we didn't already
                 if response_count == 0:
                     print("⚠️ No response chunks received from Ollama")
+                    # Send sources even if no response chunks
+                    if sources:
+                        yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
                 yield f"data: {{\"done\": true}}\n\n"
             else:
                 yield f"data: {{\"error\": \"Failed to get response from model\"}}\n\n"
@@ -1796,7 +1819,66 @@ def convert_docx_to_markdown():
                     # Create MarkItDown instance and convert the file
                     converter = MarkItDown()
                     result = converter.convert_local(docx_path)
-                    markdown_content = result.text_content
+                    
+                    # Debug: Print available properties
+                    print(f"🔍 MarkItDown result properties: {dir(result)}")
+                    print(f"🔍 Result type: {type(result)}")
+                    
+                    # Try to get the markdown content with proper headers
+                    # Check for different possible properties
+                    markdown_content = None
+                    
+                    # Try common markdown properties
+                    for prop in ['markdown', 'content', 'md', 'markdown_content']:
+                        if hasattr(result, prop):
+                            value = getattr(result, prop)
+                            if value:
+                                print(f"✅ Found markdown content in property: {prop}")
+                                markdown_content = value
+                                break
+                    
+                    # Always enhance the content with proper markdown formatting
+                    # Whether it comes from markdown property or text_content
+                    if markdown_content:
+                        print("🔧 Enhancing markdown formatting")
+                        lines = markdown_content.split('\n')
+                        processed_lines = []
+                        in_list = False
+                        
+                        for line in lines:
+                            line = line.strip()
+                            if line:
+                                # Check if line looks like a header (title case, short, no punctuation)
+                                if (len(line) < 50 and 
+                                    not any(char in line for char in '.,;:!?') and
+                                    (line.istitle() or line.isupper()) and
+                                    not line.startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.'))):
+                                    # Convert to header
+                                    processed_lines.append(f"# {line}")
+                                    in_list = False
+                                # Check for list items (lines starting with numbers or bullets)
+                                elif (line.startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.')) or
+                                      (line[0].isdigit() and '. ' in line[:5])):
+                                    processed_lines.append(f"- {line.lstrip('•-*1234567890. ')}")
+                                    in_list = True
+                                # Check for bold text (all caps longer text)
+                                elif line.isupper() and len(line) > 3:
+                                    processed_lines.append(f"**{line}**")
+                                    in_list = False
+                                else:
+                                    processed_lines.append(line)
+                                    in_list = False
+                            else:
+                                if in_list:
+                                    processed_lines.append("")  # Add spacing after lists
+                                in_list = False
+                        
+                        markdown_content = '\n\n'.join(processed_lines)
+                    
+                    # Fallback to string representation
+                    if not markdown_content:
+                        print("⚠️ Using string representation as fallback")
+                        markdown_content = str(result)
                     
                     # Create the output filename (replace .docx with .md)
                     base_name = os.path.splitext(filename)[0]

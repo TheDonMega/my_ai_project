@@ -1,0 +1,174 @@
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999999;
+  backdrop-filter: blur(12px);
+  animation: overlayFadeIn 0.3s ease-out;
+  padding: 20px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  transform: translateZ(0);
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: white;
+  border-radius: 20px;
+  width: 95%;
+  max-width: 1000px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  animation: modalFadeIn 0.3s ease-out;
+  border: 3px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+  z-index: 999999;
+  transform: translateZ(0);
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modalHeader {
+  padding: 24px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border-radius: 20px 20px 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  color: #1a202c;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+.closeButton {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: white;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+  font-weight: bold;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.closeButton:hover {
+  background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(245, 101, 101, 0.4);
+}
+
+.modalContent {
+  padding: 0;
+  overflow: hidden;
+  flex: 1;
+  background: white;
+  border-radius: 0 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.documentContent {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #2d3748;
+  background: white;
+  padding: 32px;
+  border-radius: 0 0 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(85vh - 120px);
+}
+
+/* Custom scrollbar for modal content */
+.documentContent::-webkit-scrollbar {
+  width: 12px;
+}
+
+.documentContent::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.documentContent::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #cbd5e0 0%, #a0aec0 100%);
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.documentContent::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .modalOverlay {
+    padding: 10px;
+  }
+  
+  .modal {
+    width: 100%;
+    max-height: 95vh;
+  }
+  
+  .modalHeader {
+    padding: 20px 24px;
+  }
+  
+  .modalHeader h2 {
+    font-size: 1.3rem;
+  }
+  
+  .documentContent {
+    padding: 24px;
+    font-size: 13px;
+    max-height: calc(95vh - 100px);
+  }
+}

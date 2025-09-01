@@ -240,8 +240,8 @@ Ready for your first question!`;
                 break;
               }
               
-              // Capture sources from the first metadata message
-              if (data.sources && data.model_used) {
+              // Capture sources when they arrive (they come after the AI response)
+              if (data.sources) {
                 console.log('Sources data received:', data.sources);
                 console.log('Sources filenames:', data.sources.map((s: any) => s.filename));
                 setCurrentSources(data.sources);
