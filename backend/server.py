@@ -95,11 +95,23 @@ def get_conversation_context() -> str:
         return ""
     
     context = "\n=== CONVERSATION HISTORY ===\n"
+    context += "IMPORTANT: Use this conversation history to understand context and references.\n"
+    context += "If the user asks a follow-up question, refer to the previous exchanges for context.\n\n"
+    
     for i, exchange in enumerate(conversation_history[-5:], 1):  # Last 5 exchanges
-        context += f"\nExchange {i}:\n"
+        context += f"Exchange {i}:\n"
         context += f"User: {exchange['user']}\n"
-        context += f"AI: {exchange['ai'][:200]}...\n"  # Truncate AI response for context
-    context += "\n"
+        context += f"AI: {exchange['ai'][:300]}...\n"  # Increased truncation for better context
+        context += "\n"
+    
+    context += "CONTEXT INSTRUCTIONS:\n"
+    context += "- Pay attention to the specific type of document being asked about (license vs passport)\n"
+    context += "- If the user asks about 'license', look for license-related files and information\n"
+    context += "- If the user asks about 'passport', look for passport-related files and information\n"
+    context += "- Do not mix up license and passport information - they are different documents\n"
+    context += "- Use the conversation history to understand what the user is referring to\n"
+    context += "- If the user asks a follow-up question, maintain context from previous exchanges\n\n"
+    
     return context
 
 def preload_ollama_model():
@@ -352,7 +364,7 @@ def ask_ollama_with_context(query, context_documents):
                 f"{ollama_url}/api/generate",
                 json=request_data,
                 headers={"Content-Type": "application/json"},
-                timeout=60
+                timeout=120
             )
             
             if response.status_code == 200:
@@ -641,19 +653,61 @@ def ask():
 def get_document(filename):
     """Get the full content of a specific document"""
     try:
-        # Find the file in the knowledge base to get its full path
-        file_doc = next((doc for doc in kb if doc['filename'] == filename), None)
-        if file_doc:
-            # Use the full_path from the knowledge base
-            file_path = file_doc['full_path']
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                return jsonify({
-                    'filename': filename,
-                    'content': content
-                })
+        if FILE_TOOLS_AVAILABLE:
+            # Use file tools to get the document content
+            tools = FileToolsIntegration()
+            
+            # First try to find the file by searching through all directories
+            # Search for files with this name
+            search_result = tools.search_files(filename, "", False)
+            
+            if search_result.get("success") and search_result.get("files"):
+                # Found the file, get its content
+                file_info = search_result["files"][0]  # Take the first match
+                file_path = file_info.get("path", "")
+                
+                # Extract directory from file_path
+                directory = ""
+                if '/' in file_path:
+                    directory = os.path.dirname(file_path)
+                    filename_only = os.path.basename(file_path)
+                else:
+                    filename_only = filename
+                
+                content_result = tools.get_file_content(filename_only, directory)
+                
+                if content_result.get("success"):
+                    return jsonify({
+                        'filename': filename,
+                        'content': content_result['content']
+                    })
+                else:
+                    return jsonify({'error': f'Error reading document: {content_result.get("error", "Unknown error")}'}), 500
+            else:
+                # Fallback: try to get content directly (for files in root directory)
+                content_result = tools.get_file_content(filename, "")
+                
+                if content_result.get("success"):
+                    return jsonify({
+                        'filename': filename,
+                        'content': content_result['content']
+                    })
+                else:
+                    return jsonify({'error': f'Document not found: {filename}'}), 404
         else:
-            return jsonify({'error': 'Document not found'}), 404
+            # Fallback to vector search knowledge base
+            file_doc = next((doc for doc in kb if doc['filename'] == filename), None)
+            if file_doc:
+                # Use the full_path from the knowledge base
+                file_path = file_doc['full_path']
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    return jsonify({
+                        'filename': filename,
+                        'content': content
+                    })
+            else:
+                return jsonify({'error': 'Document not found'}), 404
     except Exception as e:
         return jsonify({'error': f'Error reading document: {str(e)}'}), 500
 
@@ -1540,154 +1594,289 @@ def query_with_model_stream():
             sources = []
             
             if include_files and FILE_TOOLS_AVAILABLE:
-                # Use MCP file tools instead of vector search
+                # Let the AI use the file tools dynamically based on the user's question
                 tools = FileToolsIntegration()
                 
-                # Analyze the question to determine what file operations to perform
+                # First, let's do a smart search to find relevant files based on the user's question
+                # Extract key search terms from the question
+                search_terms = []
                 question_lower = question.lower()
                 
-                # Smart detection of file-related questions - more flexible approach
-                # Look for patterns that indicate the user wants to find, search, or access files
-                file_operation_indicators = [
-                    # Direct file operations
-                    'find', 'search', 'grep', 'list', 'show', 'get',
-                    # Time-based queries
-                    'latest', 'last', 'recent', 'newest', 'oldest',
-                    # Content-based queries
-                    'contain', 'mention', 'include', 'about',
-                    # File system concepts
-                    'file', 'note', 'document', 'content',
-                    # Possessive/ownership indicators
-                    'my', 'your', 'have', 'got', 'exists',
-                    # Question patterns
-                    'what', 'when', 'where', 'which', 'how many'
-                ]
+                # Common patterns for different types of queries
+                if any(word in question_lower for word in ['viki', 'vicki', 'vicky']):
+                    search_terms.extend(['viki', 'vicki', 'vicky'])
+                if 'last' in question_lower or 'latest' in question_lower:
+                    search_terms.append('latest')
+                if 'note' in question_lower or 'notes' in question_lower:
+                    search_terms.append('note')
+                if 'mention' in question_lower or 'talk about' in question_lower:
+                    search_terms.append('mention')
                 
-                # Check if the question is asking about files or content
-                is_file_question = any(indicator in question_lower for indicator in file_operation_indicators)
-                
-                # Additional context clues
-                has_date_pattern = any(pattern in question for pattern in ['/', '2025', '2024', '2023', 'today', 'yesterday'])
-                has_file_extension = any(ext in question_lower for ext in ['.md', '.txt', '.doc', '.pdf'])
-                is_asking_about_content = any(word in question_lower for word in ['content', 'text', 'data', 'information'])
-                
-                # If it's a file-related question or has specific patterns, use file tools
-                if is_file_question or has_date_pattern or has_file_extension or is_asking_about_content:
-                    file_context = ""
-                    operations_performed = []
+                # If no specific terms found, use intelligent term extraction
+                if not search_terms:
+                    # Extract meaningful words from the question, filtering out common stop words
+                    stop_words = {
+                        'what', 'when', 'where', 'which', 'about', 'with', 'from', 'they', 'have', 'were', 
+                        'will', 'this', 'that', 'find', 'show', 'tell', 'give', 'help', 'does', 'do', 'is', 
+                        'are', 'was', 'were', 'be', 'been', 'being', 'the', 'a', 'an', 'and', 'or', 'but', 
+                        'in', 'on', 'at', 'to', 'for', 'of', 'by', 'with', 'without', 'up', 'down', 'out', 
+                        'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 
+                        'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 
+                        'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 
+                        'very', 'can', 'will', 'just', 'should', 'now'
+                    }
                     
-                    # INTELLIGENT MULTI-OPERATION APPROACH
-                    # Instead of using elif, we'll perform multiple operations based on the question
+                    words = question.split()
+                    # Extract meaningful words: longer than 2 chars, not stop words, and not punctuation
+                    meaningful_words = []
+                    for word in words:
+                        word_clean = word.lower().strip('.,?!;:')
+                        if (len(word_clean) > 2 and 
+                            word_clean not in stop_words and 
+                            not word_clean.isdigit() and
+                            not word_clean.startswith("'")):
+                            meaningful_words.append(word_clean)
                     
-                    # 1. ALWAYS check for specific content/terms first (most important)
-                    if any(word in question_lower for word in ['contain', 'mention', 'about', 'search', 'have', 'what']):
-                        # Extract potential search terms from the question
-                        common_words = {'what', 'when', 'where', 'which', 'how', 'many', 'files', 'notes', 'find', 'search', 'contain', 'mention', 'about', 'my', 'your', 'have', 'got', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'do', 'i', 'on'}
-                        words = question.split()
-                        search_terms = [word.lower().rstrip('?').rstrip('!').rstrip('.') for word in words if len(word) > 2 and word.lower() not in common_words]
-                        
-                        if search_terms:
-                            file_context += "=== CONTENT SEARCH RESULTS ===\n"
-                            operations_performed.append("content_search")
+                    # Prioritize terms: names first, then specific items, then general terms
+                    priority_terms = []
+                    general_terms = []
+                    
+                    for word in meaningful_words:
+                        # Check if it looks like a name (capitalized in original question)
+                        original_word = next((w for w in words if w.lower() == word), word)
+                        if original_word[0].isupper() and len(word) > 2:
+                            priority_terms.insert(0, word)  # Names get highest priority
+                        else:
+                            general_terms.append(word)
+                    
+                    search_terms = priority_terms + general_terms
+                    
+                    # Limit to top 4 most relevant terms to avoid too many searches
+                    search_terms = search_terms[:4]
+                
+                print(f"🔍 Extracted search terms: {search_terms}")
+                
+                # Search for relevant content using the extracted terms
+                relevant_files = []
+                all_sources = []
+                
+                # Use a more intelligent search approach - search for the most relevant combinations first
+                if len(search_terms) > 1:
+                    # Try searching for combinations of terms first (more specific matches)
+                    for i in range(len(search_terms)):
+                        for j in range(i + 1, len(search_terms)):
+                            combined_term = f"{search_terms[i]} {search_terms[j]}"
+                            try:
+                                search_result = tools.grep_content(combined_term, "", False, 3)
+                                if search_result.get("success") and search_result.get("results"):
+                                    print(f"🔍 Found {len(search_result['results'])} files with combined term '{combined_term}'")
+                                    for result in search_result["results"]:
+                                        file_path = result.get('file', '')
+                                        filename = result.get('filename', '')
+                                        
+                                        # Check if we already have this file
+                                        if not any(source['filename'] == filename for source in all_sources):
+                                            # Get the full content of this file
+                                            directory = ""
+                                            if '/' in file_path:
+                                                directory = os.path.dirname(file_path)
+                                                filename_only = os.path.basename(file_path)
+                                            else:
+                                                filename_only = filename
+                                            
+                                            content_result = tools.get_file_content(filename_only, directory)
+                                            if content_result.get("success"):
+                                                relevant_files.append({
+                                                    'filename': filename,
+                                                    'path': file_path,
+                                                    'content': content_result['content'],
+                                                    'search_term': combined_term,
+                                                    'matches': result.get('matches', []),
+                                                    'relevance_score': 95.0  # High relevance for combined terms
+                                                })
+                                                
+                                                # Add to sources for display
+                                                all_sources.append({
+                                                    'filename': filename,
+                                                    'folder_path': file_path,
+                                                    'relevance': 95.0,
+                                                    'header': filename,
+                                                    'content': content_result['content'][:500] + "..." if len(content_result['content']) > 500 else content_result['content'],
+                                                    'full_document_available': True
+                                                })
+                                                
+                                                print(f"✅ Added highly relevant file: {filename} (combined term: {combined_term})")
+                            except Exception as e:
+                                print(f"❌ Error searching for combined term '{combined_term}': {e}")
+                                continue
+                
+                # Then search for individual terms if we don't have enough files
+                if len(relevant_files) < 3:
+                    for term in search_terms:
+                        try:
+                            # For names, try multiple variations
+                            search_variations = [term]
+                            if "'" in term:  # Handle possessive forms
+                                search_variations.append(term.replace("'", ""))
+                                search_variations.append(term.replace("'s", ""))
+                            elif term.endswith('s'):  # Handle plural forms
+                                search_variations.append(term[:-1])
                             
-                            # Search for the most relevant terms
-                            for term in search_terms[:3]:  # Limit to 3 terms to avoid too many results
-                                search_result = tools.grep_content(term, "", False, 5)
-                                if search_result.get("success") and search_result.get("results"):
-                                    file_context += f"\n📁 Files containing '{term}':\n"
-                                    for result in search_result["results"]:
-                                        file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
-                                        # Get full content of files with matches
-                                        content_result = tools.get_file_content(result['filename'], "")
-                                        if content_result.get("success"):
-                                            file_context += f"    📄 FULL CONTENT:\n{content_result['content']}\n\n"
-                                else:
-                                    file_context += f"\n❌ No files found containing '{term}'\n"
-                    
-                    # 2. If asking about latest/recent files, ALSO check that
-                    if any(word in question_lower for word in ['latest', 'last', 'recent', 'newest']):
-                        file_context += "\n=== LATEST FILES ===\n"
-                        operations_performed.append("latest_files")
-                        
-                        # Find latest files in different directories
-                        directories = ["", "Medscribe", "QA", "Agent", "MCP"]  # Add more directories as needed
-                        for directory in directories:
-                            latest_result = tools.find_latest_file(directory, "*.md")
-                            if latest_result.get("success"):
-                                latest_file = latest_result["latest_file"]
-                                file_context += f"\n📁 Latest file in {directory or 'root'}: {latest_file['filename']} (modified: {latest_file['modified_human']})\n"
+                            # Search for each variation
+                            for search_term in search_variations:
+                                search_result = tools.grep_content(search_term, "", False, 3)
+                                print(f"🔍 Search result for '{search_term}': {len(search_result.get('results', []))} files")
                                 
-                                # Get content of the latest file
-                                content_result = tools.get_file_content(latest_file['filename'], directory)
-                                if content_result.get("success"):
-                                    file_context += f"  📄 Content: {content_result['content'][:1000]}...\n\n"
-                    
-                    # 3. If asking about specific dates, ALSO check that
-                    if has_date_pattern:
-                        file_context += "\n=== DATE-SPECIFIC SEARCH ===\n"
-                        operations_performed.append("date_search")
-                        
-                        # Search for date patterns in files
-                        date_patterns = ['8/', '9/', '10/', '11/', '12/', '1/', '2/', '3/', '4/', '5/', '6/', '7/']
-                        for pattern in date_patterns:
-                            if pattern in question:
-                                search_result = tools.grep_content(pattern, "", False, 5)
                                 if search_result.get("success") and search_result.get("results"):
-                                    file_context += f"\n📅 Files containing date pattern '{pattern}':\n"
                                     for result in search_result["results"]:
-                                        file_context += f"  • {result['filename']}: {len(result['matches'])} matches\n"
-                                        # Get content for date-specific files
-                                        content_result = tools.get_file_content(result['filename'], "")
-                                        if content_result.get("success"):
-                                            file_context += f"    📄 Content: {content_result['content'][:800]}...\n\n"
-                    
-                    # 4. If asking about file types or general overview, ALSO provide that
-                    if has_file_extension or any(word in question_lower for word in ['list', 'show', 'all', 'overview']):
-                        file_context += "\n=== FILE OVERVIEW ===\n"
-                        operations_performed.append("file_overview")
-                        
-                        # List recent files to provide context
+                                        file_path = result.get('file', '')
+                                        filename = result.get('filename', '')
+                                        
+                                        # Check if we already have this file
+                                        if not any(source['filename'] == filename for source in all_sources):
+                                            # Get the full content of this file
+                                            directory = ""
+                                            if '/' in file_path:
+                                                directory = os.path.dirname(file_path)
+                                                filename_only = os.path.basename(file_path)
+                                            else:
+                                                filename_only = filename
+                                            
+                                            content_result = tools.get_file_content(filename_only, directory)
+                                            if content_result.get("success"):
+                                                relevant_files.append({
+                                                    'filename': filename,
+                                                    'path': file_path,
+                                                    'content': content_result['content'],
+                                                    'search_term': search_term,
+                                                    'matches': result.get('matches', []),
+                                                    'relevance_score': 85.0  # Medium relevance for individual terms
+                                                })
+                                                
+                                                # Add to sources for display
+                                                all_sources.append({
+                                                    'filename': filename,
+                                                    'folder_path': file_path,
+                                                    'relevance': 85.0,
+                                                    'header': filename,
+                                                    'content': content_result['content'][:500] + "..." if len(content_result['content']) > 500 else content_result['content'],
+                                                    'full_document_available': True
+                                                })
+                                                
+                                                print(f"✅ Added relevant file: {filename} (term: {search_term})")
+                                        else:
+                                            print(f"⚠️ File {filename} already added, skipping")
+                                            
+                                    # If we found files with this term, don't search other variations
+                                    break
+                                    
+                        except Exception as e:
+                            print(f"❌ Error searching for term '{term}': {e}")
+                            continue
+                
+                # If still no files found, try listing files to see what's available
+                if not relevant_files:
+                    try:
                         list_result = tools.list_files("", "modified", True)
                         if list_result.get("success") and list_result.get("files"):
-                            file_context += "\n📋 Recent files in knowledge base:\n"
-                            for file_info in list_result["files"][:10]:  # Show top 10 files
-                                file_context += f"  • {file_info['filename']} (modified: {file_info['modified_human']})\n"
+                            # Get the latest few files
+                            latest_files = list_result["files"][:3]
+                            for file_info in latest_files:
+                                if file_info.get("is_file") and file_info['filename'].endswith('.md'):
+                                    filename = file_info['filename']
+                                    file_path = file_info['path']
+                                    
+                                    # Extract directory from file_path
+                                    directory = ""
+                                    if '/' in file_path:
+                                        directory = os.path.dirname(file_path)
+                                        filename_only = os.path.basename(file_path)
+                                    else:
+                                        filename_only = filename
+                                    
+                                    # Get content of this file
+                                    content_result = tools.get_file_content(filename_only, directory)
+                                    if content_result.get("success"):
+                                        relevant_files.append({
+                                            'filename': filename,
+                                            'path': file_path,
+                                            'content': content_result['content'],
+                                            'search_term': 'latest',
+                                            'matches': [],
+                                            'relevance_score': 70.0
+                                        })
+                                        
+                                        all_sources.append({
+                                            'filename': filename,
+                                            'folder_path': file_path,
+                                            'relevance': 70.0,
+                                            'header': filename,
+                                            'content': content_result['content'][:500] + "..." if len(content_result['content']) > 500 else content_result['content'],
+                                            'full_document_available': True
+                                        })
+                                    else:
+                                        print(f"❌ Failed to get content for {filename}: {content_result.get('error')}")
+                    except Exception as e:
+                        print(f"❌ Error listing files: {e}")
+                
+                # Create context with the found files
+                if relevant_files:
+                    # Sort files by relevance score and limit to top 3 most relevant
+                    relevant_files.sort(key=lambda x: x['relevance_score'], reverse=True)
+                    top_files = relevant_files[:3]
                     
-                    # 5. If we haven't found anything specific, provide a comprehensive search
-                    if not operations_performed:
-                        file_context += "\n=== COMPREHENSIVE SEARCH ===\n"
-                        operations_performed.append("comprehensive_search")
-                        
-                        # Try a broader search approach
-                        list_result = tools.list_files("", "modified", True)
-                        if list_result.get("success") and list_result.get("files"):
-                            file_context += "\n📋 All available files:\n"
-                            for file_info in list_result["files"][:15]:  # Show top 15 files
-                                file_context += f"  • {file_info['filename']} (modified: {file_info['modified_human']})\n"
+                    context = "=== RELEVANT FILE CONTENT ===\n"
+                    context += f"Found {len(top_files)} most relevant files for your question.\n\n"
                     
-                    if file_context:
-                        context = file_context
-                        # Create sources from the file operations
-                        sources = [{
-                            'filename': 'MCP File Tools Search',
-                            'folder_path': 'MCP Tools',
-                            'relevance': 100,
-                            'header': f'File Operation Results ({", ".join(operations_performed)})',
-                            'content': file_context[:500] + "..." if len(file_context) > 500 else file_context,
-                            'full_document_available': True
-                        }]
+                    for file_info in top_files:
+                        context += f"📄 FILE: {file_info['filename']}\n"
+                        context += f"📍 Path: {file_info['path']}\n"
+                        context += f"🔍 Search Term: {file_info['search_term']}\n"
+                        context += f"📊 Relevance Score: {file_info['relevance_score']}%\n"
                         
-                        print(f"🔧 MCP Operations performed: {operations_performed}")
-                        print(f"📄 File context generated: {len(file_context)} characters")
+                        # Limit content length to prevent timeouts - focus on most relevant parts
+                        content = file_info['content']
+                        if len(content) > 2000:
+                            # For long files, show beginning and end, focusing on the middle
+                            content = content[:1000] + "\n\n... [Content truncated for efficiency] ...\n\n" + content[-1000:]
+                        
+                        context += f"📝 CONTENT:\n{content}\n"
+                        context += "---\n\n"
+                    
+                    context += f"❓ QUESTION: {question}\n"
+                    context += "💡 INSTRUCTIONS: Use the ACTUAL file content above to answer the question. The AI model should determine which information is most relevant to the user's specific question and provide a focused, accurate answer based on the actual content found."
+                    
+                    sources = all_sources
+                    print(f"✅ Found {len(top_files)} most relevant files with optimized content")
+                else:
+                    context = f"❓ QUESTION: {question}\n"
+                    context += "⚠️ No relevant files found in the knowledge base. You may need to add more documents or refine your search."
+                    sources = []
+                    print("⚠️ No relevant files found")
+                
+                operations_performed = ["smart_file_search_with_content"]
+                print(f"🔍 Final context length: {len(context)}")
                 
             elif include_files and not FILE_TOOLS_AVAILABLE:
                 # Fallback to vector search if file tools are not available
                 print("⚠️ File tools not available, falling back to vector search")
-                context, sources = search_knowledge_base(question, top_k=5)
-                return context, sources
+                search_results = search_knowledge_base(question, kb, num_results=5)
+                if search_results:
+                    context = "\n\n---\n\n".join([doc['section'] for doc in search_results])
+                    sources = [{
+                        'filename': doc['filename'],
+                        'folder_path': doc['folder_path'],
+                        'relevance': doc['relevance'],
+                        'header': doc['header'] if doc['header'] else 'No header',
+                        'content': doc['section'][:500] + "..." if len(doc['section']) > 500 else doc['section'],
+                        'full_document_available': True
+                    } for doc in search_results]
+                else:
+                    context = "No relevant files found in knowledge base."
+                    sources = []
             
-            # Send metadata first
-            yield f"data: {{\"sources\": {json.dumps(sources)}, \"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
+            # Send initial metadata (without sources)
+            yield f"data: {{\"model_used\": \"{model_manager.get_selected_model()}\", \"include_files\": {json.dumps(include_files)}}}\n\n"
             
             # Stream the response
             response_obj = model_manager.query_with_selected_model(
@@ -1722,6 +1911,29 @@ def query_with_model_stream():
                                 print(f"✅ Streaming completed with {response_count} response chunks")
                                 # Add to conversation history
                                 add_to_conversation_history(question, full_response)
+                                
+                                # Parse the AI response to find which files it actually referenced
+                                referenced_sources = []
+                                if sources and full_response:
+                                    # Look for file references in the AI's response
+                                    response_lower = full_response.lower()
+                                    for source in sources:
+                                        filename_lower = source['filename'].lower()
+                                        # Check if the AI mentioned this file in its response
+                                        if filename_lower in response_lower:
+                                            referenced_sources.append(source)
+                                            print(f"✅ AI referenced file: {source['filename']}")
+                                        else:
+                                            print(f"⚠️ AI did not reference file: {source['filename']}")
+                                
+                                # Only send the sources that the AI actually referenced
+                                if referenced_sources:
+                                    yield f"data: {{\"sources\": {json.dumps(referenced_sources)}}}\n\n"
+                                    print(f"📋 Returning {len(referenced_sources)} referenced sources out of {len(sources)} total sources")
+                                elif sources:
+                                    print(f"⚠️ AI did not reference any specific files, returning all sources")
+                                    yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
+                                
                                 # Send done signal and break
                                 yield f"data: {{\"done\": true}}\n\n"
                                 break
@@ -1733,6 +1945,9 @@ def query_with_model_stream():
                 # Ensure we send a final done signal if we didn't already
                 if response_count == 0:
                     print("⚠️ No response chunks received from Ollama")
+                    # Send sources even if no response chunks
+                    if sources:
+                        yield f"data: {{\"sources\": {json.dumps(sources)}}}\n\n"
                 yield f"data: {{\"done\": true}}\n\n"
             else:
                 yield f"data: {{\"error\": \"Failed to get response from model\"}}\n\n"
@@ -1796,7 +2011,66 @@ def convert_docx_to_markdown():
                     # Create MarkItDown instance and convert the file
                     converter = MarkItDown()
                     result = converter.convert_local(docx_path)
-                    markdown_content = result.text_content
+                    
+                    # Debug: Print available properties
+                    print(f"🔍 MarkItDown result properties: {dir(result)}")
+                    print(f"🔍 Result type: {type(result)}")
+                    
+                    # Try to get the markdown content with proper headers
+                    # Check for different possible properties
+                    markdown_content = None
+                    
+                    # Try common markdown properties
+                    for prop in ['markdown', 'content', 'md', 'markdown_content']:
+                        if hasattr(result, prop):
+                            value = getattr(result, prop)
+                            if value:
+                                print(f"✅ Found markdown content in property: {prop}")
+                                markdown_content = value
+                                break
+                    
+                    # Always enhance the content with proper markdown formatting
+                    # Whether it comes from markdown property or text_content
+                    if markdown_content:
+                        print("🔧 Enhancing markdown formatting")
+                        lines = markdown_content.split('\n')
+                        processed_lines = []
+                        in_list = False
+                        
+                        for line in lines:
+                            line = line.strip()
+                            if line:
+                                # Check if line looks like a header (title case, short, no punctuation)
+                                if (len(line) < 50 and 
+                                    not any(char in line for char in '.,;:!?') and
+                                    (line.istitle() or line.isupper()) and
+                                    not line.startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.'))):
+                                    # Convert to header
+                                    processed_lines.append(f"# {line}")
+                                    in_list = False
+                                # Check for list items (lines starting with numbers or bullets)
+                                elif (line.startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.')) or
+                                      (line[0].isdigit() and '. ' in line[:5])):
+                                    processed_lines.append(f"- {line.lstrip('•-*1234567890. ')}")
+                                    in_list = True
+                                # Check for bold text (all caps longer text)
+                                elif line.isupper() and len(line) > 3:
+                                    processed_lines.append(f"**{line}**")
+                                    in_list = False
+                                else:
+                                    processed_lines.append(line)
+                                    in_list = False
+                            else:
+                                if in_list:
+                                    processed_lines.append("")  # Add spacing after lists
+                                in_list = False
+                        
+                        markdown_content = '\n\n'.join(processed_lines)
+                    
+                    # Fallback to string representation
+                    if not markdown_content:
+                        print("⚠️ Using string representation as fallback")
+                        markdown_content = str(result)
                     
                     # Create the output filename (replace .docx with .md)
                     base_name = os.path.splitext(filename)[0]
