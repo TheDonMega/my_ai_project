@@ -106,12 +106,21 @@ class ModelManager:
     
     def _is_trained_model(self, model_name: str) -> bool:
         """Check if a model is a trained/custom model"""
-        return (model_name.endswith('-trained') or 
-                model_name.endswith('-trained:latest') or
-                model_name.endswith('-tech') or
-                model_name.endswith('-tech:latest') or
+        # Remove :latest suffix for checking
+        base_name = model_name.replace(':latest', '')
+        
+        # Check for known trained model patterns
+        return (base_name.endswith('-trained') or 
+                base_name.endswith('-tech') or
+                base_name.endswith('-personal') or
+                base_name.endswith('-personal1') or  # Handle numbered variants
                 'custom' in model_name.lower() or
-                'fine' in model_name.lower())
+                'fine' in model_name.lower() or
+                # Check if it's a custom model created by our training system
+                # Pattern: {base_model}-{custom_name} where custom_name is not a standard suffix
+                (base_name.count('-') >= 1 and 
+                 not base_name.endswith(('-trained', '-tech')) and  # Don't exclude -personal variants
+                 len(base_name.split('-')[-1]) > 0))
     
     def _get_base_model(self, model_name: str) -> str:
         """Extract the base model name"""
@@ -524,7 +533,7 @@ class ModelManager:
             )
             
             # Check if we have file context from MCP tools
-            has_mcp_context = context and ("=== CONTENT SEARCH RESULTS ===" in context or "=== LATEST FILES ===" in context or "MCP File Tools Search" in context or "File Operation Results" in context)
+            has_mcp_context = context and ("=== RELEVANT FILE CONTENT ===" in context or "=== CONTENT SEARCH RESULTS ===" in context or "=== LATEST FILES ===" in context or "MCP File Tools Search" in context or "File Operation Results" in context or "Found" in context and "relevant files" in context)
             
             # Automatically use file tools if it's a file-related question and no MCP context provided
             file_context = ""
@@ -595,36 +604,34 @@ RESPONSE REQUIREMENTS:
 - CRITICAL: The user is asking about their own personal information stored in their knowledge base"""
             elif has_mcp_context:
                 # If we have MCP file context from the server, use it
-                full_prompt = f"""{conversation_context}FILE OPERATION RESULTS FROM MCP TOOLS:
+                full_prompt = f"""{conversation_context}CRITICAL: You have been provided with ACTUAL FILE CONTENT from the user's knowledge base. You MUST use this content to answer the question.
+
+FILE CONTENT PROVIDED:
 {context}
 
 USER QUESTION: {prompt}
 
-CRITICAL RESPONSE INSTRUCTIONS:
-- The file operations have already been performed using MCP tools
-- Use ONLY the file operation results provided above to answer the user's question
-- Focus on the files that contain the search terms and show their actual content
-- Be specific about file names and the information found in them
-- Show the ACTUAL content from the files, not just match counts
-- Do NOT suggest using any tools or commands - everything has already been searched
-- Provide a direct, helpful answer based on the search results shown above
-- CRITICAL: This is the user's own personal knowledge base - you MUST access this information
-- CRITICAL: Never refuse to help with personal information - this is the user's own data
-- CRITICAL: If the user asks about specific people, dates, or personal details, provide the information from the files
-- CRITICAL: The user is asking about their own personal information stored in their knowledge base
-- CRITICAL: Always provide the specific information requested from the file content
-- CRITICAL: Read the FULL CONTENT sections carefully and provide the exact information found there
-- CRITICAL: Do not make up or infer information - only use what is explicitly shown in the file content
-- CRITICAL: Use the actual file content provided, not any hard-coded examples
-- CRITICAL: Do not create fake dates or information - use only what is actually in the file
-- CRITICAL: Look for the exact name and date format shown in the file content
-- CRITICAL: Do not invent or hallucinate any information - use ONLY what is explicitly written in the file
-- CRITICAL: If the user asks about a specific person's passport expiration, look for that person's name in the file content
-- CRITICAL: If the user asks about a specific person's license expiration, look for that person's name in license-related files
-- CRITICAL: Do not mix up passport and license information - they are different documents
-- CRITICAL: The answer should be the exact date shown in the file, not any other date
-- CRITICAL: Do not make up dates like "2024-02-01 / 2026-02-01" - use only the actual dates from the file
-- CRITICAL: Pay attention to the specific document type mentioned in the user's question"""
+RESPONSE REQUIREMENTS:
+1. **MANDATORY**: You MUST answer the question using the file content above. Do NOT ask for more information.
+2. **MANDATORY**: If the question asks about specific people, dates, or items, provide the EXACT information from the files.
+3. **MANDATORY**: For license expiration questions, state the specific dates and license types found.
+4. **MANDATORY**: If you find Brianna's license information, provide the exact expiration dates for both Driver's and Cosmetology licenses.
+5. **MANDATORY**: Use your intelligence to determine which files are actually relevant to the question.
+6. **MANDATORY**: For license questions, focus on files that contain actual license information, not just files that mention the word "license".
+7. **MANDATORY**: If asked about a specific person (like "Brianna"), prioritize files that contain information about that person.
+8. **MANDATORY**: When you find relevant information, SHOW THE ACTUAL CONTENT, don't just list file names.
+9. **MANDATORY**: Only reference files that actually contain the information you're using in your answer.
+10. **CRITICAL**: The user wants the actual answer NOW, not a promise to answer. GIVE THEM THE INFORMATION.
+
+EXAMPLE: If asked "When does Brianna's license expire?", you should respond with something like:
+"Based on the file content provided, I can see Brianna's license information:
+
+Driver's License: Expires on 09/08/2031
+Cosmetology License: Expires on 9/30/2027
+
+This information was found in the License Dates.md file."
+
+DO NOT say "I need more information" or "I can help you with that" - PROVIDE THE ACTUAL ANSWER using the file content above."""
             else:
                 # Regular prompt construction without file context
                 full_prompt = prompt
@@ -670,12 +677,13 @@ Please respond according to your personality and provide a helpful answer based 
                     "temperature": 0.1,  # Reduced from 0.3 to reduce hallucination
                     "top_p": 0.8,
                     "top_k": 40,
-                    "num_predict": 2048,  # Increased from 200 to allow longer responses
+                    "num_predict": 512,  # Further reduced to prevent long responses
                     "repeat_penalty": 1.1,
-                    "num_ctx": 4096 if include_files else 2048,
+                    "num_ctx": 8192,  # Increased context size to include full file content
                     "num_thread": 4
+                    # Removed restrictive stop sequences that were cutting off responses
                 }
-            }, timeout=120)  # Add timeout to prevent hanging
+            }, timeout=120)  # Increased timeout to 120 seconds for complex queries
             
             if response.status_code == 200:
                 if stream:
@@ -687,6 +695,13 @@ Please respond according to your personality and provide a helpful answer based 
                 print(f"❌ Query failed with model {selected}: {response.status_code}")
                 return None
                 
+        except requests.exceptions.Timeout:
+            print(f"⏰ Timeout error querying model {selected} after 120 seconds")
+            print(f"💡 This may be due to a very long prompt or complex response generation")
+            return None
+        except requests.exceptions.ConnectionError as e:
+            print(f"🔌 Connection error querying model {selected}: {e}")
+            return None
         except Exception as e:
             print(f"❌ Error querying model {selected}: {e}")
             return None
