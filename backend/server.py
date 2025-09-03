@@ -53,6 +53,63 @@ kb = []  # Global knowledge base variable
 conversation_history = []
 MAX_CONVERSATION_HISTORY = 10  # Keep last 10 exchanges
 
+# Global conversation context to maintain conversation flow across queries
+session_conversation_context = {
+    'current_session': None,
+    'last_question': None,
+    'last_answer': None,
+    'mentioned_entities': set(),  # Track people, places, things mentioned
+    'session_start_time': None
+}
+
+def get_session_id():
+    """Generate a unique session ID for the current conversation"""
+    if not session_conversation_context['current_session']:
+        session_conversation_context['current_session'] = f"session_{int(time.time())}"
+        session_conversation_context['session_start_time'] = datetime.now()
+    return session_conversation_context['current_session']
+
+def update_conversation_context(question, answer):
+    """Update conversation context with the latest Q&A"""
+    session_id = get_session_id()
+    
+    # Update conversation context
+    session_conversation_context['last_question'] = question
+    session_conversation_context['last_answer'] = answer
+    
+    # Extract entities from the question and answer (names, places, etc.)
+    # This helps the AI understand context without hardcoding
+    entities = set()
+    
+    # Look for capitalized words that might be names
+    words = question.split() + answer.split()
+    for word in words:
+        word_clean = word.strip('.,?!;:').strip('"\'')
+        if len(word_clean) > 2 and word_clean[0].isupper() and not word_clean.isupper():
+            entities.add(word_clean)
+    
+    session_conversation_context['mentioned_entities'].update(entities)
+    
+    print(f"🔄 Updated conversation context for session {session_id}")
+    print(f"📝 Last question: {question[:100]}...")
+    print(f"📝 Last answer: {answer[:100]}...")
+    print(f"👥 Mentioned entities: {list(session_conversation_context['mentioned_entities'])[:5]}...")
+
+def get_conversation_context_for_prompt():
+    """Get formatted conversation context for the AI prompt"""
+    if not session_conversation_context['last_question'] or not session_conversation_context['last_answer']:
+        return ""
+    
+    context = f"""
+CONVERSATION CONTEXT:
+Previous question: {session_conversation_context['last_question']}
+Previous answer: {session_conversation_context['last_answer']}
+Mentioned entities: {', '.join(list(session_conversation_context['mentioned_entities'])[:10])}
+
+Use this context to understand references like "her", "his", "their", etc. from the previous conversation.
+"""
+    return context
+
 def load_personality_prompt(behavior_filename: str = "behavior.md"):
     """Load personality/behavior prompt from specified behavior file"""
     global PERSONALITY_PROMPT
@@ -1654,18 +1711,33 @@ def query_with_model_stream():
                     # Limit to top 4 most relevant terms to avoid too many searches
                     search_terms = search_terms[:4]
                 
-                print(f"🔍 Extracted search terms: {search_terms}")
+                # Enhanced search: If asking about a person, also search for related documents
+                enhanced_search_terms = search_terms.copy()
+                
+                # Dynamically add related search terms based on conversation context
+                if session_conversation_context['mentioned_entities']:
+                    # If we have entities from previous conversation, add related terms
+                    related_terms = ['passport', 'license', 'insurance', 'vision', 'medical', 'document', 'expiration', 'date']
+                    enhanced_search_terms.extend(related_terms)
+                    print(f"🔍 Enhanced search with conversation context: {enhanced_search_terms}")
+                elif any(term.lower() in ['passport', 'license', 'insurance', 'vision', 'medical'] for term in search_terms):
+                    # If asking about specific document types, add related terms
+                    related_terms = ['passport', 'license', 'insurance', 'vision', 'medical', 'document', 'expiration', 'date']
+                    enhanced_search_terms.extend(related_terms)
+                    print(f"🔍 Enhanced search for document types: {enhanced_search_terms}")
+                
+                print(f"🔍 Final search terms: {enhanced_search_terms}")
                 
                 # Search for relevant content using the extracted terms
                 relevant_files = []
                 all_sources = []
                 
                 # Use a more intelligent search approach - search for the most relevant combinations first
-                if len(search_terms) > 1:
+                if len(enhanced_search_terms) > 1:
                     # Try searching for combinations of terms first (more specific matches)
-                    for i in range(len(search_terms)):
-                        for j in range(i + 1, len(search_terms)):
-                            combined_term = f"{search_terms[i]} {search_terms[j]}"
+                    for i in range(len(enhanced_search_terms)):
+                        for j in range(i + 1, len(enhanced_search_terms)):
+                            combined_term = f"{enhanced_search_terms[i]} {enhanced_search_terms[j]}"
                             try:
                                 search_result = tools.grep_content(combined_term, "", False, 3)
                                 if search_result.get("success") and search_result.get("results"):
@@ -1712,7 +1784,7 @@ def query_with_model_stream():
                 
                 # Then search for individual terms if we don't have enough files
                 if len(relevant_files) < 3:
-                    for term in search_terms:
+                    for term in enhanced_search_terms:
                         try:
                             # For names, try multiple variations
                             search_variations = [term]
@@ -1885,7 +1957,7 @@ def query_with_model_stream():
                 include_files=include_files,
                 context=context,
                 personality_prompt=get_personality_prompt(),
-                conversation_context=conversation_context
+                conversation_context=get_conversation_context_for_prompt()
             )
             
             if response_obj:
@@ -1909,6 +1981,8 @@ def query_with_model_stream():
                             # Check if done - break out of the loop when done
                             if data.get('done', False):
                                 print(f"✅ Streaming completed with {response_count} response chunks")
+                                # Update conversation context with this Q&A
+                                update_conversation_context(question, full_response)
                                 # Add to conversation history
                                 add_to_conversation_history(question, full_response)
                                 

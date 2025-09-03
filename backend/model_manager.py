@@ -606,7 +606,7 @@ RESPONSE REQUIREMENTS:
                 # If we have MCP file context from the server, use it
                 full_prompt = f"""{conversation_context}CRITICAL: You have been provided with ACTUAL FILE CONTENT from the user's knowledge base. You MUST use this content to answer the question.
 
-FILE CONTENT PROVIDED:
+FILE CONTEXT PROVIDED:
 {context}
 
 USER QUESTION: {prompt}
@@ -617,11 +617,13 @@ RESPONSE REQUIREMENTS:
 3. **MANDATORY**: For license expiration questions, state the specific dates and license types found.
 4. **MANDATORY**: If you find Brianna's license information, provide the exact expiration dates for both Driver's and Cosmetology licenses.
 5. **MANDATORY**: Use your intelligence to determine which files are actually relevant to the question.
-6. **MANDATORY**: For license questions, focus on files that contain actual license information, not just files that mention the word "license".
+6. **MANDATORY**: For license questions, focus on files that contain actual license information, not just files that happen to mention the word "license".
 7. **MANDATORY**: If asked about a specific person (like "Brianna"), prioritize files that contain information about that person.
 8. **MANDATORY**: When you find relevant information, SHOW THE ACTUAL CONTENT, don't just list file names.
 9. **MANDATORY**: Only reference files that actually contain the information you're using in your answer.
 10. **CRITICAL**: The user wants the actual answer NOW, not a promise to answer. GIVE THEM THE INFORMATION.
+11. **CONTEXT AWARENESS**: If the question uses pronouns like "her", "his", "their", look for context clues in the files to determine who is being referred to.
+12. **RELATED INFORMATION**: If asking about a person's passport, license, or other documents, check ALL files that might contain information about that person.
 
 EXAMPLE: If asked "When does Brianna's license expire?", you should respond with something like:
 "Based on the file content provided, I can see Brianna's license information:
@@ -630,6 +632,13 @@ Driver's License: Expires on 09/08/2031
 Cosmetology License: Expires on 9/30/2027
 
 This information was found in the License Dates.md file."
+
+EXAMPLE: If asked "What about her passport?" and you see files about Brianna, you should respond with:
+"Based on the file content provided, I can see Brianna's passport information:
+
+Brianna's passport expires on 4/26/2029
+
+This information was found in the Passport Dates.md file."
 
 DO NOT say "I need more information" or "I can help you with that" - PROVIDE THE ACTUAL ANSWER using the file content above."""
             else:
